@@ -1,0 +1,22 @@
+{
+  "name": "Jikoni",
+  "short_name": "Jikoni",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#f6f2e7",
+  "theme_color": "#f6f2e7",
+  "icons": [
+    {
+      "src": "/public/icons/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/public/icons/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+
+
