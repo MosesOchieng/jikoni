@@ -491,11 +491,15 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// ----- Start server -----
+// ----- Start server (only when running locally) -----
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Jikoni API + frontend running on http://localhost:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Jikoni API + frontend running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
 
 
