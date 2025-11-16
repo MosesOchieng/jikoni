@@ -482,12 +482,20 @@ app.get("/api/loyalty", authRequired, (req, res) => {
     }
   );
 });
+ 
+// ----- Serve frontend (static PWA) -----
+
+app.use(express.static(__dirname));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
 // ----- Start server -----
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`Jikoni API running on http://localhost:${PORT}`);
+  console.log(`Jikoni API + frontend running on http://localhost:${PORT}`);
 });
 
 
