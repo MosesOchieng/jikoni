@@ -7,13 +7,22 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const app = express();
-app.use(cors());
+// CORS configuration - allow all origins for development
+app.use(cors({
+  origin: true, // Allow all origins
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-jikoni-secret-change-me";
 
 // ----- SQLite setup -----
-const dbPath = path.join(__dirname, "jikoni.db");
+// Use /tmp on Vercel (read-only filesystem), project root for local dev
+const dbPath = process.env.VERCEL
+  ? path.join("/tmp", "jikoni.db")
+  : path.join(__dirname, "jikoni.db");
 const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
@@ -110,10 +119,21 @@ function authRequired(req, res, next) {
   }
 }
 
-// ----- Mail setup (Nodemailer, JSON transport for now) -----
-const mailer = nodemailer.createTransport({
-  jsonTransport: true, // logs email content instead of actually sending; swap to real SMTP later
-});
+// ----- Mail setup (Nodemailer) -----
+// Use real SMTP if configured via environment variables, otherwise JSON transport for development
+const mailer = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: process.env.SMTP_PORT === "465",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    })
+  : nodemailer.createTransport({
+      jsonTransport: true, // logs email content instead of actually sending; configure SMTP_* env vars for production
+    });
 
 // ----- In-memory data (hubs / carts can stay in memory for now) -----
 const hubs = [
@@ -187,19 +207,24 @@ app.post("/api/auth/signup", (req, res) => {
         return res.status(500).json({ message: "Could not start signup" });
       }
 
-      // Send email with Nodemailer (logged to console via jsonTransport)
+      // Send email with Nodemailer
       mailer.sendMail(
         {
           to: email,
-          from: "no-reply@jikoni.app",
+          from: process.env.SMTP_FROM || "no-reply@jikoni.app",
           subject: "Your Jikoni verification code",
           text: `Hi ${name},\n\nYour Jikoni verification code is: ${otp}\n\nIf you did not request this, you can ignore this email.\n`,
         },
         (mailErr, info) => {
           if (mailErr) {
             console.error("Mail error", mailErr);
+            // Don't fail signup if email fails, but log it
           } else {
-            console.log("Sent verification email:", info && (info.messageId || info));
+            if (process.env.SMTP_HOST) {
+              console.log("Sent verification email to", email);
+            } else {
+              console.log("Email (JSON transport):", JSON.stringify(info, null, 2));
+            }
           }
         }
       );
@@ -335,21 +360,21 @@ app.get("/api/hubs", (req, res) => {
   res.json({ hubs });
 });
 
-// ----- Cart -----
+// ----- Cart (auth required) -----
 
-app.get("/api/cart/:phone", (req, res) => {
-  const phone = req.params.phone;
-  res.json({ cart: carts[phone] || [] });
+app.get("/api/cart", authRequired, (req, res) => {
+  const email = req.user.email;
+  res.json({ cart: carts[email] || [] });
 });
 
-app.post("/api/cart/:phone", (req, res) => {
-  const phone = req.params.phone;
+app.post("/api/cart", authRequired, (req, res) => {
+  const email = req.user.email;
   const { items } = req.body; // [{ productId, qty }]
   if (!Array.isArray(items)) {
     return res.status(400).json({ message: "items[] required" });
   }
-  carts[phone] = items.filter((i) => i.qty > 0);
-  res.json({ cart: carts[phone] });
+  carts[email] = items.filter((i) => i.qty > 0);
+  res.json({ cart: carts[email] });
 });
 
 // ----- Orders (auth required) -----
@@ -387,6 +412,15 @@ app.post("/api/orders", authRequired, (req, res) => {
       }
 
       const id = this.lastID;
+
+      // Process payment (placeholder - integrate with M-Pesa, card processor, or COD)
+      // For now, we assume payment is successful
+      // TODO: Integrate with actual payment gateways:
+      // - M-Pesa: Use Safaricom Daraja API
+      // - Card: Use Stripe, Flutterwave, or similar
+      // - COD: Mark as pending, confirm on delivery
+      const paymentStatus = paymentMethod === "cod" ? "pending" : "completed";
+      console.log(`Order ${id}: Payment ${paymentStatus} via ${paymentMethod}`);
 
       // award points & update streak
       const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
@@ -487,7 +521,9 @@ app.get("/api/loyalty", authRequired, (req, res) => {
 
 app.use(express.static(__dirname));
 
-app.get("*", (req, res) => {
+// Catch-all route for SPA - must be after all API routes
+// Express 5 doesn't support "*", so we use a regex pattern
+app.get(/^(?!\/api).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 

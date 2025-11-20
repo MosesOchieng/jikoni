@@ -1,4 +1,17 @@
-const API_BASE = "http://localhost:4000";
+// Use relative URLs for production (Vercel), absolute for local dev
+// Detect if we're on a different port than the API server
+const API_BASE = (() => {
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  
+  // If on localhost/127.0.0.1/0.0.0.0 and not on port 4000, use port 4000 for API
+  const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname === "";
+  if (isLocal && port !== "4000") {
+    return "http://localhost:4000";
+  }
+  // If on port 4000 or production, use relative URLs
+  return "";
+})();
 
 const SCREENS = {
   LOADER: "loader",
@@ -14,6 +27,7 @@ const SCREENS = {
   PROFILE: "profile",
   SEARCH: "search",
   ORDER_SUCCESS: "orderSuccess",
+  ORDER_HISTORY: "orderHistory",
 };
 
 let currentScreen = SCREENS.LOADER;
@@ -35,6 +49,7 @@ let heroTimerSeconds = 59;
 let notificationPrefs = { streakReminders: true, hamperAlerts: true };
 let lastOrderSummary = null;
 let deferredInstallPrompt = null;
+let currentCategory = null; // For filtering products by category
 
 function authHeaders() {
   if (currentUser?.token) {
@@ -58,9 +73,20 @@ function getCurrentHub() {
 function loadState() {
   try {
     const savedUser = localStorage.getItem("jikoniUser");
-    if (savedUser) currentUser = JSON.parse(savedUser);
-    const savedCart = localStorage.getItem("jikoniCart");
-    if (savedCart) cart = JSON.parse(savedCart);
+    if (savedUser) {
+      currentUser = JSON.parse(savedUser);
+      // Load cart from backend if user is logged in
+      if (currentUser?.email && currentUser?.token) {
+        loadCartFromBackend();
+      } else {
+        // Fallback to local storage
+        const savedCart = localStorage.getItem("jikoniCart");
+        if (savedCart) cart = JSON.parse(savedCart);
+      }
+    } else {
+      const savedCart = localStorage.getItem("jikoniCart");
+      if (savedCart) cart = JSON.parse(savedCart);
+    }
     const savedHub = localStorage.getItem("jikoniHub");
     if (savedHub) currentHubId = savedHub;
     const savedWalkIn = localStorage.getItem("jikoniWalkIn");
@@ -72,6 +98,43 @@ function loadState() {
   }
 }
 
+function loadCartFromBackend() {
+  if (!currentUser?.email || !currentUser?.token) return;
+  fetch(`${API_BASE}/api/cart`, {
+    method: "GET",
+    headers: authHeaders(),
+  })
+    .then((res) => {
+      if (res.ok) return res.json();
+      throw new Error("Failed to load cart");
+    })
+    .then((data) => {
+      if (data.cart && Array.isArray(data.cart)) {
+        // Merge backend cart with local products data
+        cart = data.cart.map((item) => {
+          const product = productsData.find((p) => p.id === item.productId);
+          if (product) {
+            return {
+              id: item.productId,
+              name: product.name,
+              meta: product.unit,
+              price: product.price,
+              qty: item.qty,
+            };
+          }
+          return item;
+        });
+        saveCart(); // Save to localStorage too
+      }
+    })
+    .catch((err) => {
+      console.error("Cart load error:", err);
+      // Fallback to local storage
+      const savedCart = localStorage.getItem("jikoniCart");
+      if (savedCart) cart = JSON.parse(savedCart);
+    });
+}
+
 function saveUser() {
   if (currentUser) {
     localStorage.setItem("jikoniUser", JSON.stringify(currentUser));
@@ -80,6 +143,21 @@ function saveUser() {
 
 function saveCart() {
   localStorage.setItem("jikoniCart", JSON.stringify(cart));
+  // Sync with backend if user is logged in
+  if (currentUser?.email && currentUser?.token) {
+    const items = cart.map((item) => ({
+      productId: item.id,
+      qty: item.qty,
+    }));
+    fetch(`${API_BASE}/api/cart`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ items }),
+    }).catch((err) => {
+      console.error("Cart sync error:", err);
+      // Don't show error to user, cart is saved locally
+    });
+  }
 }
 
 function saveHubSettings() {
@@ -92,14 +170,29 @@ function saveNotificationPrefs() {
 }
 
 function loadHubs() {
-  fetch(`${API_BASE}/api/hubs`)
-    .then((res) => res.json())
+  const apiUrl = `${API_BASE}/api/hubs`;
+  fetch(apiUrl)
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error(`Failed to load hubs: ${res.status}`);
+      }
+      return res.json();
+    })
     .then((data) => {
       hubsData = data.hubs || [];
       render();
     })
-    .catch(() => {
-      // ignore; keep fallback UI
+    .catch((err) => {
+      console.error("Failed to load hubs:", err);
+      // Use default hub if API fails
+      hubsData = [{
+        id: "trm",
+        name: "TRM Hub",
+        areas: ["Thika Road", "Kasarani", "Roysambu"],
+        etaMinutes: 8,
+        walkInOffers: [],
+        stock: { eggs: 0, sukuma: 0 },
+      }];
     });
 }
 
@@ -132,14 +225,28 @@ function loadLoyalty() {
 }
 
 function loadProducts() {
-  fetch(`${API_BASE}/api/products`)
-    .then((res) => res.json())
+  if (productsData.length > 0) return; // Already loaded
+  const apiUrl = `${API_BASE}/api/products`;
+  console.log("Loading products from:", apiUrl);
+  fetch(apiUrl, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error(`Failed to load products: ${res.status} ${res.statusText}`);
+      }
+      return res.json();
+    })
     .then((data) => {
       productsData = data.products || [];
-      render();
+      if (currentScreen === SCREENS.SEARCH) {
+        render(); // Re-render search if we're on that screen
+      }
     })
-    .catch(() => {
-      // ignore
+    .catch((err) => {
+      console.error("Failed to load products:", err);
+      showToast("Could not load products. Make sure the backend is running on port 4000.");
     });
 }
 
@@ -207,9 +314,15 @@ function render() {
   } else if (currentScreen === SCREENS.PROFILE) {
     shell.appendChild(renderProfile());
   } else if (currentScreen === SCREENS.SEARCH) {
+    // Ensure products are loaded
+    if (productsData.length === 0) {
+      loadProducts();
+    }
     shell.appendChild(renderSearch());
   } else if (currentScreen === SCREENS.ORDER_SUCCESS) {
     shell.appendChild(renderOrderSuccess());
+  } else if (currentScreen === SCREENS.ORDER_HISTORY) {
+    shell.appendChild(renderOrderHistory());
   } else {
     shell.appendChild(renderHome());
   }
@@ -474,37 +587,70 @@ function renderSignUp() {
     const previousLabel = submit.textContent;
     submit.textContent = "Sending code…";
 
-    fetch(`${API_BASE}/api/auth/signup`, {
+    const apiUrl = `${API_BASE}/api/auth/signup`;
+    console.log("Signup API URL:", apiUrl);
+    console.log("Signup payload:", { name, email, password: "***" });
+    
+    // Show loading state
+    submit.disabled = true;
+    submit.textContent = "Creating account...";
+    submit.style.opacity = "0.7";
+    
+    fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password }),
     })
       .then(async (res) => {
+        console.log("Signup response status:", res.status);
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Non-JSON response:", text);
+          throw new Error(`Server returned non-JSON response: ${res.status}`);
+        }
+        
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.message || "Failed to start signup");
+          const errorMsg = data.message || `Server error (${res.status})`;
+          throw new Error(errorMsg);
         }
         return res.json();
       })
       .then((data) => {
+        console.log("Signup success:", data);
+        // Show success message with code if provided (for testing)
         if (data.code) {
-          // Show mock OTP while you are testing
-          showToast(`Mock code: ${data.code}`);
+          showToast(`✅ Account created! Verification code: ${data.code}`);
         } else {
-          showToast("We’ve emailed you a code");
+          showToast("✅ Account created! Check your email for the verification code.");
         }
-        // Confirm success clearly
-        showToast("Sign up successful. Check your email for the 4‑digit code.");
-        currentScreen = SCREENS.VERIFY;
-        render();
+        
+        // Small delay to show success message, then redirect to verify
+        setTimeout(() => {
+          currentScreen = SCREENS.VERIFY;
+          render();
+        }, 1500);
       })
       .catch((err) => {
-        console.error(err);
-        showToast(err.message || "Could not reach Jikoni servers");
-      })
-      .finally(() => {
+        console.error("Signup error:", err);
+        let errorMsg = err.message || "Could not reach Jikoni servers";
+        
+        // More helpful error messages
+        if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.name === "TypeError") {
+          errorMsg = "❌ Cannot connect to server. Make sure the backend is running on port 4000.";
+        } else if (err.message.includes("404")) {
+          errorMsg = "❌ API endpoint not found. Check server configuration.";
+        } else if (err.message.includes("CORS")) {
+          errorMsg = "❌ CORS error. Check server CORS settings.";
+        } else if (err.message.includes("already exists") || err.message.includes("duplicate")) {
+          errorMsg = "❌ This email is already registered. Try logging in instead.";
+        }
+        
+        showToast(errorMsg);
         submit.disabled = false;
         submit.textContent = previousLabel;
+        submit.style.opacity = "1";
       });
   });
 
@@ -568,33 +714,76 @@ function renderLogin() {
     submit.disabled = true;
     submit.textContent = "Checking…";
 
-    fetch(`${API_BASE}/api/auth/login`, {
+    const apiUrl = `${API_BASE}/api/auth/login`;
+    console.log("Login API URL:", apiUrl);
+    console.log("Login payload:", { email, password: "***" });
+    
+    // Show loading state
+    submit.disabled = true;
+    submit.textContent = "Logging in...";
+    submit.style.opacity = "0.7";
+    
+    fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     })
       .then(async (res) => {
+        console.log("Login response status:", res.status);
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Non-JSON response:", text);
+          throw new Error(`Server returned non-JSON response: ${res.status}`);
+        }
+        
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.message || "Login failed");
+          const errorMsg = data.message || `Server error (${res.status})`;
+          throw new Error(errorMsg);
         }
         return res.json();
       })
       .then((data) => {
+        console.log("Login success:", data);
+        if (!data.user || !data.token) {
+          throw new Error("Invalid response from server");
+        }
         currentUser = { ...data.user, token: data.token };
         saveUser();
-        showToast(`Karibu back, ${currentUser.name || "rafiki"}!`);
+        showToast(`✅ Karibu back, ${currentUser.name || "rafiki"}!`);
+        
+        // Load user data
         loadLoyalty();
-        currentScreen = SCREENS.HOME;
-        render();
+        loadCartFromBackend();
+        
+        // Small delay to show success message, then redirect to dashboard
+        setTimeout(() => {
+          currentScreen = SCREENS.HOME;
+          render();
+        }, 1500);
       })
       .catch((err) => {
-        console.error(err);
-        showToast(err.message || "Could not reach Jikoni servers");
-      })
-      .finally(() => {
+        console.error("Login error:", err);
+        let errorMsg = err.message || "Could not reach Jikoni servers";
+        
+        // More helpful error messages
+        if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.name === "TypeError") {
+          errorMsg = "❌ Cannot connect to server. Make sure the backend is running on port 4000.";
+        } else if (err.message.includes("404")) {
+          errorMsg = "❌ API endpoint not found. Check server configuration.";
+        } else if (err.message.includes("401") || err.message.includes("Incorrect password")) {
+          errorMsg = "❌ Incorrect email or password. Please try again.";
+        } else if (err.message.includes("not verified")) {
+          errorMsg = "❌ Please verify your email first. Check your inbox for the verification code.";
+        } else if (err.message.includes("User not found")) {
+          errorMsg = "❌ No account found with this email. Please sign up first.";
+        }
+        
+        showToast(errorMsg);
         submit.disabled = false;
         submit.textContent = previousLabel;
+        submit.style.opacity = "1";
       });
   });
 
@@ -652,21 +841,34 @@ function renderVerify() {
       render();
       return;
     }
-    if (!code) {
-      showToast("Enter the 4‑digit code");
+    if (!code || code.length !== 4) {
+      showToast("Enter the 4‑digit verification code");
       return;
     }
 
     const previousLabel = submit.textContent;
     submit.disabled = true;
-    submit.textContent = "Verifying…";
+    submit.textContent = "Verifying...";
+    submit.style.opacity = "0.7";
 
-    fetch(`${API_BASE}/api/auth/verify`, {
+    const apiUrl = `${API_BASE}/api/auth/verify`;
+    console.log("Verify API URL:", apiUrl);
+    console.log("Verify payload:", { email: pendingUser.email, code: "****" });
+
+    fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: pendingUser.email, code }),
     })
       .then(async (res) => {
+        console.log("Verify response status:", res.status);
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Non-JSON response:", text);
+          throw new Error(`Server returned non-JSON response: ${res.status}`);
+        }
+        
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.message || "Verification failed");
@@ -674,21 +876,39 @@ function renderVerify() {
         return res.json();
       })
       .then((data) => {
+        console.log("Verify success:", data);
+        if (!data.user || !data.token) {
+          throw new Error("Invalid response from server");
+        }
         currentUser = { ...data.user, isVerified: true, token: data.token };
         saveUser();
         pendingUser = null;
-        showToast("You’re in. Karibu Jikoni!");
+        showToast("✅ Email verified! Welcome to Jikoni!");
+        
+        // Load user data
         loadLoyalty();
-        currentScreen = SCREENS.HOME;
-        render();
+        loadCartFromBackend();
+        
+        // Small delay to show success message, then redirect to dashboard
+        setTimeout(() => {
+          currentScreen = SCREENS.HOME;
+          render();
+        }, 1500);
       })
       .catch((err) => {
-        console.error(err);
-        showToast(err.message || "Could not reach Jikoni servers");
-      })
-      .finally(() => {
+        console.error("Verify error:", err);
+        let errorMsg = err.message || "Could not reach Jikoni servers";
+        
+        if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.name === "TypeError") {
+          errorMsg = "❌ Cannot connect to server. Make sure the backend is running on port 4000.";
+        } else if (err.message.includes("Invalid code")) {
+          errorMsg = "❌ Invalid verification code. Please check and try again.";
+        }
+        
+        showToast(errorMsg);
         submit.disabled = false;
         submit.textContent = previousLabel;
+        submit.style.opacity = "1";
       });
   });
 
@@ -822,9 +1042,15 @@ function renderHome() {
     ["🥛", "Milk"],
     ["🥚", "Eggs"],
   ].forEach(([icon, label]) => {
-    const chip = document.createElement("div");
+    const chip = document.createElement("button");
     chip.className = "category-chip";
+    chip.style.cursor = "pointer";
     chip.innerHTML = `<div class="category-icon">${icon}</div><div>${label}</div>`;
+    chip.onclick = () => {
+      currentCategory = label;
+      currentScreen = SCREENS.SEARCH;
+      render();
+    };
     catRow.appendChild(chip);
   });
 
@@ -1253,6 +1479,15 @@ function renderProfile() {
     showToast("Hamper alerts preference updated.");
   });
 
+  const orderHistoryBtn = document.createElement("button");
+  orderHistoryBtn.className = "secondary-btn";
+  orderHistoryBtn.style.marginTop = "8px";
+  orderHistoryBtn.textContent = "View order history";
+  orderHistoryBtn.onclick = () => {
+    currentScreen = SCREENS.ORDER_HISTORY;
+    render();
+  };
+
   const logoutWrap = document.createElement("div");
   logoutWrap.className = "splash-footer";
   const logoutBtn = document.createElement("button");
@@ -1263,7 +1498,7 @@ function renderProfile() {
     cart = [];
     localStorage.removeItem("jikoniUser");
     saveCart();
-    showToast("You’ve been logged out.");
+    showToast("You've been logged out.");
     currentScreen = SCREENS.AUTH_CHOICE;
     render();
   };
@@ -1273,6 +1508,7 @@ function renderProfile() {
   wrap.appendChild(body);
   wrap.appendChild(editRow);
   wrap.appendChild(prefs);
+  wrap.appendChild(orderHistoryBtn);
   wrap.appendChild(logoutWrap);
   return wrap;
 }
@@ -1312,6 +1548,13 @@ function renderOrderSuccess() {
     currentScreen = SCREENS.HOME;
     render();
   };
+  const historyBtn = document.createElement("button");
+  historyBtn.className = "secondary-btn";
+  historyBtn.textContent = "View order history";
+  historyBtn.onclick = () => {
+    currentScreen = SCREENS.ORDER_HISTORY;
+    render();
+  };
   const loyaltyBtn = document.createElement("button");
   loyaltyBtn.className = "secondary-btn";
   loyaltyBtn.textContent = "View loyalty";
@@ -1320,6 +1563,7 @@ function renderOrderSuccess() {
     render();
   };
   actions.appendChild(homeBtn);
+  actions.appendChild(historyBtn);
   actions.appendChild(loyaltyBtn);
 
   wrap.appendChild(header);
@@ -1328,67 +1572,329 @@ function renderOrderSuccess() {
   return wrap;
 }
 
-function renderSearch() {
+function renderOrderHistory() {
   const wrap = document.createElement("div");
-  wrap.className = "auth-screen";
+  wrap.className = "cart-screen";
+  
   const header = document.createElement("div");
-  header.className = "auth-header";
-  header.innerHTML = `
-    <div class="auth-title">Search Jikoni</div>
-    <div class="auth-subtitle">What are you shopping for today?</div>
-  `;
-  const form = document.createElement("form");
-  form.className = "auth-form";
-  form.innerHTML = `
-    <div>
-      <div class="field-label">Search</div>
-      <input class="field-input" placeholder="Milk, sukuma, spices…" />
-      <div class="auth-helper">Voice search with the green mic button on the home screen.</div>
-    </div>
-  `;
-  wrap.appendChild(header);
-  wrap.appendChild(form);
+  header.className = "cart-header";
+  const left = document.createElement("div");
+  left.innerHTML = `<div class="cart-title">Order History</div>`;
+  const backBtn = document.createElement("button");
+  backBtn.className = "secondary-btn";
+  backBtn.style.width = "auto";
+  backBtn.style.padding = "8px 14px";
+  backBtn.textContent = "Back";
+  backBtn.onclick = () => {
+    currentScreen = SCREENS.PROFILE;
+    render();
+  };
+  header.appendChild(left);
+  header.appendChild(backBtn);
 
-  const section = document.createElement("div");
-  section.className = "section-title";
-  section.textContent = "Browse products";
-  wrap.appendChild(section);
+  const body = document.createElement("div");
+  body.className = "loyalty-widget";
+  body.style.minHeight = "200px";
+  body.innerHTML = `<div style="text-align:center; padding:20px;">Loading orders...</div>`;
 
-  const grid = document.createElement("div");
-  grid.className = "browse-grid";
-
-  productsData.forEach((p) => {
-    const card = document.createElement("div");
-    card.className = "product-tile";
-    card.innerHTML = `
-      <div class="product-tile-name">${p.icon || ""} ${p.name}</div>
-      <div class="product-tile-meta">${p.category} · ${p.unit}</div>
+  if (!currentUser || !currentUser.token) {
+    body.innerHTML = `
+      <div style="text-align:center; padding:20px;">
+        <div>Please log in to view your order history.</div>
+        <button class="primary-btn" style="margin-top:12px;">Log in</button>
+      </div>
     `;
-    const priceRow = document.createElement("div");
-    priceRow.className = "product-price-row";
-    priceRow.innerHTML = `
-      <span>KSh ${p.price}</span>
-    `;
-    const btn = document.createElement("button");
-    btn.className = "product-add-btn";
-    btn.textContent = "Add";
-    btn.onclick = () => {
-      addToCart({
-        id: p.id,
-        name: p.name,
-        meta: p.unit,
-        price: p.price,
-      });
-      saveCart();
-      showToast(`${p.name} added to cart`);
+    const loginBtn = body.querySelector("button");
+    loginBtn.onclick = () => {
+      currentScreen = SCREENS.AUTH_CHOICE;
       render();
     };
-    priceRow.appendChild(btn);
-    card.appendChild(priceRow);
-    grid.appendChild(card);
-  });
+  } else {
+    fetch(`${API_BASE}/api/orders`, {
+      method: "GET",
+      headers: authHeaders(),
+    })
+      .then(async (res) => {
+        if (res.status === 401) {
+          currentUser = null;
+          localStorage.removeItem("jikoniUser");
+          showToast("Session expired. Please log in again.");
+          currentScreen = SCREENS.AUTH_CHOICE;
+          render();
+          throw new Error("unauthorized");
+        }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.message || "Could not load orders");
+        }
+        return res.json();
+      })
+      .then((data) => {
+        const orders = data.orders || [];
+        if (orders.length === 0) {
+          body.innerHTML = `
+            <div style="text-align:center; padding:20px;">
+              <div>No orders yet.</div>
+              <div style="font-size:13px; margin-top:8px; color:#666;">Start shopping to see your orders here!</div>
+            </div>
+          `;
+          return;
+        }
+        
+        body.innerHTML = "";
+        orders.forEach((order) => {
+          const orderCard = document.createElement("div");
+          orderCard.style.cssText = "background:white; border-radius:8px; padding:12px; margin-bottom:8px; border:1px solid #e0e0e0;";
+          const date = new Date(order.createdAt);
+          const dateStr = date.toLocaleDateString("en-KE", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          orderCard.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:4px;">
+              <div>
+                <div style="font-weight:600;">Order #${order.id}</div>
+                <div style="font-size:12px; color:#666; margin-top:2px;">${dateStr}</div>
+              </div>
+              <div style="font-weight:600; color:#f97316;">KSh ${order.total || 0}</div>
+            </div>
+          `;
+          body.appendChild(orderCard);
+        });
+      })
+      .catch((err) => {
+        console.error(err);
+        if (err.message !== "unauthorized") {
+          body.innerHTML = `
+            <div style="text-align:center; padding:20px; color:#d32f2f;">
+              <div>Could not load orders.</div>
+              <div style="font-size:12px; margin-top:4px;">${err.message || "Please try again later."}</div>
+            </div>
+          `;
+        }
+      });
+  }
 
-  wrap.appendChild(grid);
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function renderSearch() {
+  const wrap = document.createElement("div");
+  wrap.className = "cart-screen";
+  
+  const header = document.createElement("div");
+  header.className = "cart-header";
+  const left = document.createElement("div");
+  left.innerHTML = `<div class="cart-title">${currentCategory ? currentCategory : "All Products"}</div>`;
+  const backBtn = document.createElement("button");
+  backBtn.className = "secondary-btn";
+  backBtn.style.width = "auto";
+  backBtn.style.padding = "8px 14px";
+  backBtn.textContent = "Back";
+  backBtn.onclick = () => {
+    currentCategory = null;
+    currentScreen = SCREENS.HOME;
+    render();
+  };
+  header.appendChild(left);
+  header.appendChild(backBtn);
+  wrap.appendChild(header);
+
+  // Search bar
+  const searchBar = document.createElement("div");
+  searchBar.className = "search-bar";
+  searchBar.style.margin = "12px 16px";
+  const searchInput = document.createElement("input");
+  searchInput.className = "search-input";
+  searchInput.placeholder = "Search products...";
+  searchInput.style.width = "100%";
+  let searchQuery = "";
+  searchInput.addEventListener("input", (e) => {
+    searchQuery = e.target.value.toLowerCase();
+    renderProductGrid();
+  });
+  searchBar.appendChild(searchInput);
+  wrap.appendChild(searchBar);
+
+  // Category filter chips
+  const categoryRow = document.createElement("div");
+  categoryRow.className = "category-row";
+  categoryRow.style.margin = "0 16px 12px";
+  categoryRow.style.overflowX = "auto";
+  categoryRow.style.display = "flex";
+  categoryRow.style.gap = "8px";
+  const categories = ["All", "Vegetables", "Flour", "Spices", "Milk", "Eggs", "Dairy", "Cereals", "Honey", "Breakfast"];
+  categories.forEach((cat) => {
+    const chip = document.createElement("button");
+    chip.className = "category-chip";
+    chip.style.cursor = "pointer";
+    chip.style.padding = "6px 12px";
+    chip.style.borderRadius = "16px";
+    chip.style.border = currentCategory === cat || (!currentCategory && cat === "All") ? "2px solid #f97316" : "1px solid #e0e0e0";
+    chip.style.background = currentCategory === cat || (!currentCategory && cat === "All") ? "#fff5f0" : "white";
+    chip.style.color = currentCategory === cat || (!currentCategory && cat === "All") ? "#f97316" : "#333";
+    chip.textContent = cat;
+    chip.onclick = () => {
+      currentCategory = cat === "All" ? null : cat;
+      render();
+    };
+    categoryRow.appendChild(chip);
+  });
+  wrap.appendChild(categoryRow);
+
+  // Product grid container
+  const gridContainer = document.createElement("div");
+  gridContainer.style.padding = "0 16px 80px";
+  
+  function renderProductGrid() {
+    gridContainer.innerHTML = "";
+    const grid = document.createElement("div");
+    grid.className = "browse-grid";
+    grid.style.display = "grid";
+    grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(160px, 1fr))";
+    grid.style.gap = "12px";
+
+    // Filter products
+    let filteredProducts = productsData;
+    if (currentCategory && currentCategory !== "All") {
+      // Map category names to match product categories
+      const categoryMap = {
+        "Milk": "Dairy",
+        "Eggs": "Breakfast",
+        "Spices": "Spices", // May not exist, but allow it
+      };
+      const searchCategory = categoryMap[currentCategory] || currentCategory;
+      filteredProducts = productsData.filter((p) => 
+        p.category.toLowerCase() === searchCategory.toLowerCase()
+      );
+    }
+    if (searchQuery) {
+      filteredProducts = filteredProducts.filter((p) =>
+        p.name.toLowerCase().includes(searchQuery) ||
+        p.category.toLowerCase().includes(searchQuery)
+      );
+    }
+
+    if (filteredProducts.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align:center; padding:40px; color:#666;">
+          <div>No products found</div>
+          <div style="font-size:13px; margin-top:8px;">Try a different category or search term</div>
+        </div>
+      `;
+      gridContainer.appendChild(grid);
+      return;
+    }
+
+    filteredProducts.forEach((p) => {
+      const card = document.createElement("div");
+      card.className = "product-tile";
+      card.style.cssText = "background:white; border-radius:12px; padding:12px; border:1px solid #e0e0e0; display:flex; flex-direction:column;";
+      
+      // Product icon and name
+      const nameRow = document.createElement("div");
+      nameRow.style.cssText = "display:flex; align-items:center; gap:8px; margin-bottom:6px;";
+      nameRow.innerHTML = `
+        <span style="font-size:24px;">${p.icon || "📦"}</span>
+        <div style="flex:1;">
+          <div style="font-weight:600; font-size:14px; line-height:1.3;">${p.name}</div>
+          <div style="font-size:11px; color:#666; margin-top:2px;">${p.unit}</div>
+        </div>
+      `;
+      card.appendChild(nameRow);
+
+      // Category badge
+      const categoryBadge = document.createElement("div");
+      categoryBadge.style.cssText = "font-size:10px; color:#666; margin-bottom:8px; text-transform:uppercase;";
+      categoryBadge.textContent = p.category;
+      card.appendChild(categoryBadge);
+
+      // Price and quantity controls
+      const priceRow = document.createElement("div");
+      priceRow.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-top:auto;";
+      
+      const price = document.createElement("div");
+      price.style.cssText = "font-weight:600; font-size:16px; color:#f97316;";
+      price.textContent = `KSh ${p.price}`;
+      priceRow.appendChild(price);
+
+      // Check if item is in cart
+      const cartItem = cart.find((item) => item.id === p.id);
+      const qty = cartItem ? cartItem.qty : 0;
+
+      if (qty > 0) {
+        // Quantity controls
+        const qtyControls = document.createElement("div");
+        qtyControls.style.cssText = "display:flex; align-items:center; gap:8px; background:#f5f5f5; border-radius:20px; padding:4px 8px;";
+        
+        const minusBtn = document.createElement("button");
+        minusBtn.textContent = "−";
+        minusBtn.style.cssText = "width:24px; height:24px; border:none; background:#fff; border-radius:50%; cursor:pointer; font-size:16px; font-weight:bold;";
+        minusBtn.onclick = (e) => {
+          e.stopPropagation();
+          updateQty(p.id, -1);
+          render();
+        };
+        
+        const qtyDisplay = document.createElement("span");
+        qtyDisplay.style.cssText = "min-width:20px; text-align:center; font-weight:600;";
+        qtyDisplay.textContent = qty;
+        
+        const plusBtn = document.createElement("button");
+        plusBtn.textContent = "+";
+        plusBtn.style.cssText = "width:24px; height:24px; border:none; background:#f97316; color:white; border-radius:50%; cursor:pointer; font-size:16px; font-weight:bold;";
+        plusBtn.onclick = (e) => {
+          e.stopPropagation();
+          addToCart({
+            id: p.id,
+            name: p.name,
+            meta: p.unit,
+            price: p.price,
+          });
+          saveCart();
+          showToast(`${p.name} added`);
+          render();
+        };
+        
+        qtyControls.appendChild(minusBtn);
+        qtyControls.appendChild(qtyDisplay);
+        qtyControls.appendChild(plusBtn);
+        priceRow.appendChild(qtyControls);
+      } else {
+        // Add button
+        const addBtn = document.createElement("button");
+        addBtn.className = "product-add-btn";
+        addBtn.textContent = "Add";
+        addBtn.style.cssText = "background:#f97316; color:white; border:none; padding:6px 16px; border-radius:16px; font-weight:600; cursor:pointer; font-size:13px;";
+        addBtn.onclick = (e) => {
+          e.stopPropagation();
+          addToCart({
+            id: p.id,
+            name: p.name,
+            meta: p.unit,
+            price: p.price,
+          });
+          saveCart();
+          showToast(`${p.name} added to cart`);
+          render();
+        };
+        priceRow.appendChild(addBtn);
+      }
+
+      card.appendChild(priceRow);
+      grid.appendChild(card);
+    });
+
+    gridContainer.appendChild(grid);
+  }
+
+  renderProductGrid();
+  wrap.appendChild(gridContainer);
   return wrap;
 }
 
