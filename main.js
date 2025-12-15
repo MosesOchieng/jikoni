@@ -338,22 +338,25 @@ function render() {
 
   renderFooterNav();
 
+  // Only show the voice bot mic on the main dashboard (home) screen
   const existingBot = document.querySelector(".floating-bot");
   if (existingBot) existingBot.remove();
-  const bot = document.createElement("button");
-  bot.className = "floating-bot";
-  bot.innerHTML = "<span>🎙️</span>";
-  bot.addEventListener("click", () => {
-    botOpen = !botOpen;
-    if (botOpen && botMessages.length === 0) {
-      botMessages.push({
-        from: "bot",
-        text: "Hi, I’m Jikoni Bot. Try: “What’s on offer today?” or “Add eggs and sukuma.”",
-      });
-    }
-    renderBotOverlay();
-  });
-  document.body.appendChild(bot);
+  if (currentScreen === SCREENS.HOME) {
+    const bot = document.createElement("button");
+    bot.className = "floating-bot";
+    bot.innerHTML = "<span>🎙️</span>";
+    bot.addEventListener("click", () => {
+      botOpen = !botOpen;
+      if (botOpen && botMessages.length === 0) {
+        botMessages.push({
+          from: "bot",
+          text: "Hi, I’m Jikoni Bot. Try: “What’s on offer today?” or “Add eggs and sukuma.”",
+        });
+      }
+      renderBotOverlay();
+    });
+    document.body.appendChild(bot);
+  }
 
   renderBotOverlay();
 }
