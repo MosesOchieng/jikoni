@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "rm -rf dist && mkdir -p dist && cp index.html dist/index.html && cp main.js dist/main.js && cp styles.css dist/styles.css && cp sw.js dist/sw.js && cp manifest.webmanifest dist/manifest.webmanifest && cp -r public dist/public",
     "start": "node server.js"
   },
   "keywords": [],

@@ -25,11 +25,18 @@ const dbPath = process.env.VERCEL
   : path.join(__dirname, "jikoni.db");
 const db = new sqlite3.Database(dbPath);
 
+// In production we must NOT drop tables on every cold start,
+// otherwise users and orders disappear. Allow optional reset
+// in local dev with JIKONI_RESET_DB=true.
+const shouldResetDb =
+  !process.env.VERCEL && process.env.JIKONI_RESET_DB === "true";
+
 db.serialize(() => {
-  // For development we recreate the users table to switch schema
-  db.run(`DROP TABLE IF EXISTS users`);
-  db.run(`DROP TABLE IF EXISTS products`);
-  db.run(`DROP TABLE IF EXISTS orders`);
+  if (shouldResetDb) {
+    db.run(`DROP TABLE IF EXISTS users`);
+    db.run(`DROP TABLE IF EXISTS products`);
+    db.run(`DROP TABLE IF EXISTS orders`);
+  }
   db.run(
     `CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
