@@ -25,10 +25,22 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).catch(() => cached);
-    })
+    caches.match(request).then((cached) =>
+      fetch(request)
+        .then((response) => {
+          // Network success, optionally update cache in background
+          return response;
+        })
+        .catch(() => {
+          // Network failed – fall back to cache if we have it
+          if (cached) return cached;
+          // Last resort: empty offline response instead of crashing SW
+          return new Response("", {
+            status: 504,
+            statusText: "Offline",
+          });
+        })
+    )
   );
 });
 
