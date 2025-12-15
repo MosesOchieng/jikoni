@@ -21,9 +21,11 @@ const SCREENS = {
   SIGN_UP: "signup",
   LOGIN: "login",
   VERIFY: "verify",
+   FORGOT: "forgot",
   HOME: "home",
   CART: "cart",
   LOYALTY: "loyalty",
+  NOTIFICATIONS: "notifications",
   PROFILE: "profile",
   SEARCH: "search",
   ORDER_SUCCESS: "orderSuccess",
@@ -36,7 +38,7 @@ let currentUser = null;
 let pendingUser = null;
 let cart = [];
 let deliveryMethod = "delivery"; // or "pickup"
-let paymentMethod = "mpesa"; // "mpesa" | "card" | "cod"
+let paymentMethod = "paystack"; // single payment method: Paystack
 let heroIndex = 0;
 let hubsData = [];
 let currentHubId = "trm";
@@ -50,6 +52,7 @@ let notificationPrefs = { streakReminders: true, hamperAlerts: true };
 let lastOrderSummary = null;
 let deferredInstallPrompt = null;
 let currentCategory = null; // For filtering products by category
+let deliveryAddress = "";
 
 function authHeaders() {
   if (currentUser?.token) {
@@ -68,6 +71,21 @@ function getCurrentHub() {
     etaMinutes: 8,
     stock: { eggs: 0, sukuma: 0 },
   };
+}
+
+function getNearestHubForAddress(address) {
+  if (!address) return getCurrentHub();
+  const lower = address.toLowerCase();
+  if (lower.includes("thika") || lower.includes("kasarani") || lower.includes("roysambu") || lower.includes("trm")) {
+    return hubsData.find((h) => h.id === "trm") || getCurrentHub();
+  }
+  if (lower.includes("westlands") || lower.includes("parklands") || lower.includes("lavington") || lower.includes("riverside")) {
+    return hubsData.find((h) => h.id === "westlands") || getCurrentHub();
+  }
+  if (lower.includes("cbd") || lower.includes("upper hill") || lower.includes("ngara") || lower.includes("south b")) {
+    return hubsData.find((h) => h.id === "cbd") || getCurrentHub();
+  }
+  return getCurrentHub();
 }
 
 function loadState() {
@@ -93,6 +111,8 @@ function loadState() {
     if (savedWalkIn) walkInMode = savedWalkIn === "true";
     const savedPrefs = localStorage.getItem("jikoniNotificationPrefs");
     if (savedPrefs) notificationPrefs = JSON.parse(savedPrefs);
+    const savedAddress = localStorage.getItem("jikoniAddress");
+    if (savedAddress) deliveryAddress = savedAddress;
   } catch {
     // ignore
   }
@@ -167,6 +187,12 @@ function saveHubSettings() {
 
 function saveNotificationPrefs() {
   localStorage.setItem("jikoniNotificationPrefs", JSON.stringify(notificationPrefs));
+}
+
+function saveAddress() {
+  if (deliveryAddress) {
+    localStorage.setItem("jikoniAddress", deliveryAddress);
+  }
 }
 
 function loadHubs() {
@@ -274,27 +300,12 @@ function render() {
     const bell = document.createElement("button");
     bell.className = "icon-btn";
     bell.textContent = "🔔";
-    bell.onclick = () => showToast("Notifications coming soon");
-
-    const profileBtn = document.createElement("button");
-    profileBtn.className = "icon-btn";
-    profileBtn.textContent = "👤";
-    profileBtn.onclick = () => {
-      currentScreen = SCREENS.PROFILE;
-      render();
-    };
-
-    const cartIcon = document.createElement("button");
-    cartIcon.className = "icon-btn";
-    cartIcon.textContent = "🛒";
-    cartIcon.onclick = () => {
-      currentScreen = SCREENS.CART;
+    bell.onclick = () => {
+      currentScreen = SCREENS.NOTIFICATIONS;
       render();
     };
 
     icons.appendChild(bell);
-    icons.appendChild(profileBtn);
-    icons.appendChild(cartIcon);
     topBar.appendChild(logo);
     topBar.appendChild(icons);
     shell.appendChild(topBar);
@@ -314,10 +325,14 @@ function render() {
     shell.appendChild(renderLogin());
   } else if (currentScreen === SCREENS.VERIFY) {
     shell.appendChild(renderVerify());
+  } else if (currentScreen === SCREENS.FORGOT) {
+    shell.appendChild(renderForgotPassword());
   } else if (currentScreen === SCREENS.CART) {
     shell.appendChild(renderCart());
   } else if (currentScreen === SCREENS.LOYALTY) {
     shell.appendChild(renderLoyalty());
+  } else if (currentScreen === SCREENS.NOTIFICATIONS) {
+    shell.appendChild(renderNotifications());
   } else if (currentScreen === SCREENS.PROFILE) {
     shell.appendChild(renderProfile());
   } else if (currentScreen === SCREENS.SEARCH) {
@@ -560,6 +575,10 @@ function renderSignUp() {
       <div class="field-label">Password</div>
       <input class="field-input" name="password" type="password" placeholder="Create a strong password" required />
     </div>
+    <div>
+      <div class="field-label">Confirm password</div>
+      <input class="field-input" name="confirmPassword" type="password" placeholder="Repeat your password" required />
+    </div>
   `;
 
   const actions = document.createElement("div");
@@ -567,7 +586,7 @@ function renderSignUp() {
   const submit = document.createElement("button");
   submit.type = "submit";
   submit.className = "primary-btn";
-  submit.textContent = "Continue";
+  submit.textContent = "Create account";
   const back = document.createElement("button");
   back.type = "button";
   back.className = "secondary-btn";
@@ -579,14 +598,42 @@ function renderSignUp() {
   actions.appendChild(submit);
   actions.appendChild(back);
 
+  // Social auth section (UI only for now)
+  const social = document.createElement("div");
+  social.className = "auth-form";
+  social.style.marginTop = "8px";
+  social.innerHTML = `
+    <div style="text-align:center; font-size:12px; color:#7a847f; margin-bottom:6px;">Or sign up with</div>
+    <div style="display:flex; gap:8px;">
+      <button type="button" class="secondary-btn" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:14px;">
+        <span>🔵</span><span>Google</span>
+      </button>
+      <button type="button" class="secondary-btn" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:14px;">
+        <span>📸</span><span>Instagram</span>
+      </button>
+    </div>
+  `;
+  const [googleBtn, instagramBtn] = social.querySelectorAll("button");
+  googleBtn.addEventListener("click", () => {
+    showToast("Google sign-up coming soon.");
+  });
+  instagramBtn.addEventListener("click", () => {
+    showToast("Instagram sign-up coming soon.");
+  });
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const formData = new FormData(form);
     const name = (formData.get("name") || "").toString().trim();
     const email = (formData.get("email") || "").toString().trim();
     const password = (formData.get("password") || "").toString();
-    if (!name || !email || !password) {
-      showToast("Fill in your name, email and password");
+    const confirmPassword = (formData.get("confirmPassword") || "").toString();
+    if (!name || !email || !password || !confirmPassword) {
+      showToast("Fill in your name, email and both password fields");
+      return;
+    }
+    if (password !== confirmPassword) {
+      showToast("Your passwords do not match. Please check and try again.");
       return;
     }
     pendingUser = { name, email };
@@ -629,12 +676,7 @@ function renderSignUp() {
       })
       .then((data) => {
         console.log("Signup success:", data);
-        // Show success message with code if provided (for testing)
-        if (data.code) {
-          showToast(`✅ Account created! Verification code: ${data.code}`);
-        } else {
-          showToast("✅ Account created! Check your email for the verification code.");
-        }
+        showToast("✅ Account created! Check your email for the verification code.");
         
         // Small delay to show success message, then redirect to verify
         setTimeout(() => {
@@ -664,9 +706,12 @@ function renderSignUp() {
       });
   });
 
+  // Attach buttons inside the form so clicks always trigger submit
+  form.appendChild(actions);
+
   wrap.appendChild(header);
   wrap.appendChild(form);
-  wrap.appendChild(actions);
+  wrap.appendChild(social);
   return wrap;
 }
 
@@ -677,8 +722,8 @@ function renderLogin() {
   const header = document.createElement("div");
   header.className = "auth-header";
   header.innerHTML = `
-    <div class="auth-title">Log back in</div>
-    <div class="auth-subtitle">Use the email and password you used to sign up.</div>
+    <div class="auth-title">Welcome back</div>
+    <div class="auth-subtitle">Log in with the email and password you used to sign up.</div>
   `;
 
   const form = document.createElement("form");
@@ -699,7 +744,7 @@ function renderLogin() {
   const submit = document.createElement("button");
   submit.type = "submit";
   submit.className = "primary-btn";
-  submit.textContent = "Continue";
+  submit.textContent = "Log in";
   const back = document.createElement("button");
   back.type = "button";
   back.className = "secondary-btn";
@@ -710,6 +755,39 @@ function renderLogin() {
   };
   actions.appendChild(submit);
   actions.appendChild(back);
+
+  const forgot = document.createElement("button");
+  forgot.type = "button";
+  forgot.className = "link-btn";
+  forgot.textContent = "Forgot password?";
+  forgot.onclick = () => {
+    currentScreen = SCREENS.FORGOT;
+    render();
+  };
+  actions.appendChild(forgot);
+
+  // Social auth section (UI only for now)
+  const social = document.createElement("div");
+  social.className = "auth-form";
+  social.style.marginTop = "8px";
+  social.innerHTML = `
+    <div style="text-align:center; font-size:12px; color:#7a847f; margin-bottom:6px;">Or continue with</div>
+    <div style="display:flex; gap:8px;">
+      <button type="button" class="secondary-btn" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:14px;">
+        <span>🔵</span><span>Google</span>
+      </button>
+      <button type="button" class="secondary-btn" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:14px;">
+        <span>📸</span><span>Instagram</span>
+      </button>
+    </div>
+  `;
+  const [loginGoogleBtn, loginInstagramBtn] = social.querySelectorAll("button");
+  loginGoogleBtn.addEventListener("click", () => {
+    showToast("Google login coming soon.");
+  });
+  loginInstagramBtn.addEventListener("click", () => {
+    showToast("Instagram login coming soon.");
+  });
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -797,9 +875,12 @@ function renderLogin() {
       });
   });
 
+  // Attach buttons inside the form so clicks always trigger submit
+  form.appendChild(actions);
+
   wrap.appendChild(header);
   wrap.appendChild(form);
-  wrap.appendChild(actions);
+  wrap.appendChild(social);
   return wrap;
 }
 
@@ -820,8 +901,15 @@ function renderVerify() {
   form.innerHTML = `
     <div>
       <div class="field-label">Code</div>
-      <input class="field-input" name="code" maxlength="4" placeholder="••••" required />
-      <div class="auth-helper">Use the mock code shown in the toast while testing.</div>
+      <div class="code-input-row">
+        <input class="field-input code-input" name="c1" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
+        <input class="field-input code-input" name="c2" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
+        <input class="field-input code-input" name="c3" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
+        <input class="field-input code-input" name="c4" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
+        <input class="field-input code-input" name="c5" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
+        <input class="field-input code-input" name="c6" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
+      </div>
+      <div class="auth-helper">Enter the 6‑digit code we emailed you.</div>
     </div>
   `;
 
@@ -842,17 +930,33 @@ function renderVerify() {
   actions.appendChild(submit);
   actions.appendChild(back);
 
+  const codeInputs = Array.from(form.querySelectorAll(".code-input"));
+  codeInputs.forEach((input, idx) => {
+    input.addEventListener("input", (e) => {
+      const value = e.target.value.replace(/\D/g, "");
+      e.target.value = value.slice(0, 1);
+      if (value && idx < codeInputs.length - 1) {
+        codeInputs[idx + 1].focus();
+      }
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Backspace" && !e.target.value && idx > 0) {
+        codeInputs[idx - 1].focus();
+      }
+    });
+  });
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const code = (new FormData(form).get("code") || "").toString().trim();
+    const code = codeInputs.map((inp) => inp.value.trim()).join("");
     if (!pendingUser || !pendingUser.email) {
       showToast("Something went wrong, please start again.");
       currentScreen = SCREENS.SIGN_UP;
       render();
       return;
     }
-    if (!code || code.length !== 4) {
-      showToast("Enter the 4‑digit verification code");
+    if (!code || code.length !== 6) {
+      showToast("Enter the 6‑digit verification code");
       return;
     }
 
@@ -922,15 +1026,164 @@ function renderVerify() {
       });
   });
 
+  // Attach buttons inside the form so clicks always trigger submit
+  form.appendChild(actions);
+
   wrap.appendChild(header);
   wrap.appendChild(form);
-  wrap.appendChild(actions);
+  return wrap;
+}
+
+function renderForgotPassword() {
+  const wrap = document.createElement("div");
+  wrap.className = "auth-screen";
+
+  const header = document.createElement("div");
+  header.className = "auth-header";
+  header.innerHTML = `
+    <div class="auth-title">Forgot your password?</div>
+    <div class="auth-subtitle">Enter the email you used for Jikoni and we’ll email you a reset code.</div>
+  `;
+
+  const form = document.createElement("form");
+  form.className = "auth-form";
+  form.innerHTML = `
+    <div>
+      <div class="field-label">Email address</div>
+      <input class="field-input" name="email" type="email" placeholder="you@example.com" required />
+    </div>
+  `;
+
+  const actions = document.createElement("div");
+  actions.className = "splash-footer";
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "primary-btn";
+  submit.textContent = "Send reset code";
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "secondary-btn";
+  back.textContent = "Back to login";
+  back.onclick = () => {
+    currentScreen = SCREENS.LOGIN;
+    render();
+  };
+  actions.appendChild(submit);
+  actions.appendChild(back);
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const email = (new FormData(form).get("email") || "").toString().trim();
+    if (!email) {
+      showToast("Enter your email address");
+      return;
+    }
+
+    const previousLabel = submit.textContent;
+    submit.disabled = true;
+    submit.textContent = "Sending…";
+    submit.style.opacity = "0.7";
+
+    const apiUrl = `${API_BASE}/api/auth/forgot`;
+    console.log("Forgot password API URL:", apiUrl);
+    console.log("Forgot password payload:", { email });
+
+    fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    })
+      .then(async (res) => {
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Non-JSON response (forgot):", text);
+          throw new Error(`Server returned non-JSON response: ${res.status}`);
+        }
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || `Server error (${res.status})`);
+        }
+        showToast("✅ Reset code sent. Check your email.");
+        submit.disabled = false;
+        submit.textContent = previousLabel;
+        submit.style.opacity = "1";
+      })
+      .catch((err) => {
+        console.error("Forgot password error:", err);
+        let errorMsg = err.message || "Could not start reset";
+        if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.name === "TypeError") {
+          errorMsg = "❌ Cannot connect to server. Make sure the backend is running on port 4000.";
+        }
+        showToast(errorMsg);
+        submit.disabled = false;
+        submit.textContent = previousLabel;
+        submit.style.opacity = "1";
+      });
+  });
+
+  form.appendChild(actions);
+
+  wrap.appendChild(header);
+  wrap.appendChild(form);
   return wrap;
 }
 
 function renderHome() {
   const container = document.createElement("div");
   container.className = "home";
+
+  // If there is a recent order, surface a compact tracking card at the top
+  if (lastOrderSummary) {
+    const placedAt = lastOrderSummary.placedAt
+      ? new Date(lastOrderSummary.placedAt)
+      : new Date();
+    const now = new Date();
+    const minutes = Math.max(
+      0,
+      Math.floor((now.getTime() - placedAt.getTime()) / 60000)
+    );
+    let stage = 0;
+    if (minutes >= 0) stage = 1;
+    if (minutes >= 3) stage = 2;
+    if (minutes >= 8) stage = 3;
+    if (minutes >= 15) stage = 4;
+
+    const nearestHub = getNearestHubForAddress(deliveryAddress);
+
+    const trackCard = document.createElement("div");
+    trackCard.className = "loyalty-widget";
+    trackCard.style.marginTop = "4px";
+    trackCard.innerHTML = `
+      <div style="font-weight:600; margin-bottom:4px;">Your last order is on its way 🛵</div>
+      <div style="font-size:12px; color:#647067; margin-bottom:6px;">
+        ${
+          stage === 1
+            ? "We’ve received your order at the nearest Jikoni hub."
+            : stage === 2
+            ? "Your order is being picked & packed."
+            : stage === 3
+            ? "Your rider has left the hub and is on the way."
+            : "Your rider is near your place. Tafadhali keep your phone close."
+        }
+      </div>
+      <div style="display:flex; gap:8px; align-items:flex-start;">
+        <div style="flex:2;">
+          <div style="position:relative; height:6px; border-radius:999px; background:rgba(21,53,47,0.18); overflow:hidden;">
+            <div style="height:100%; width:${(stage / 4) * 100}%; background:linear-gradient(90deg,#22c55e,#f97316);"></div>
+          </div>
+          <div style="margin-top:4px; font-size:11px; color:#647067;">
+            Order #${lastOrderSummary.id} · KSh ${lastOrderSummary.total}
+          </div>
+          <div style="margin-top:2px; font-size:11px; color:#647067;">
+            From ${nearestHub?.name || "Jikoni Hub"} ${deliveryAddress ? `→ ${deliveryAddress}` : ""}
+          </div>
+        </div>
+        <div style="flex:1; text-align:right; font-size:24px;">🛵</div>
+      </div>
+    `;
+    container.appendChild(trackCard);
+  }
 
   const header = document.createElement("div");
   header.className = "home-header";
@@ -955,7 +1208,7 @@ function renderHome() {
 
   const streak = document.createElement("div");
   streak.className = "streak-pill";
-  streak.innerHTML = "🔥 Day 3 · 45 pts";
+  streak.innerHTML = "🔥 Day 3";
 
   const cartChip = document.createElement("button");
   cartChip.className = "cart-chip";
@@ -1016,12 +1269,7 @@ function renderHome() {
     <div class="hero-glow-pill"></div>
     <div class="hero-glow-title"></div>
     <div class="hero-glow-sub hero-glow-sub-main"></div>
-    <div class="hero-glow-sub">
-      Streak: Day ${loyaltyState.streak || 0} · ${loyaltyState.points || 0} pts · ${Math.max(
-        0,
-        loyaltyState.toNextReward || 0
-      )} pts to next reward
-    </div>
+    <div class="hero-glow-sub hero-glow-sub-secondary"></div>
   `;
   const heroCta = document.createElement("button");
   heroCta.className = "hero-glow-cta";
@@ -1033,6 +1281,11 @@ function renderHome() {
   timerEl.className = "hero-glow-sub hero-timer";
   timerEl.textContent = `Offer ends in 00:${String(heroTimerSeconds).padStart(2, "0")}`;
   heroGlow.appendChild(timerEl);
+
+  const iconsRow = document.createElement("div");
+  iconsRow.className = "hero-glow-icons";
+  iconsRow.innerHTML = "<span>🛵</span>";
+  heroGlow.appendChild(iconsRow);
 
   // initialise hero text & timer without re-rendering page
   updateHeroMessageDom();
@@ -1118,6 +1371,7 @@ function renderHome() {
             name: p.name,
             meta: `${p.unit}`,
             price: p.price,
+            icon: p.icon,
           });
         }
       });
@@ -1193,7 +1447,7 @@ function renderCart() {
       row.className = "cart-item-row";
       row.innerHTML = `
         <div class="cart-item-main">
-          <div class="cart-item-name">${item.name}</div>
+          <div class="cart-item-name">${item.icon ? `<span style="margin-right:6px;">${item.icon}</span>` : ""}${item.name}</div>
           <div class="cart-item-meta">${item.meta}</div>
           <div class="cart-item-meta">KSh ${item.price} each</div>
         </div>
@@ -1258,7 +1512,7 @@ function renderCart() {
   `;
   const [acceptBtn, rejectBtn] = glow.querySelectorAll(".glow-btn");
   acceptBtn.addEventListener("click", () => {
-    addToCart({ id: "milk", name: "Fresh Milk", meta: "1 L", price: 120 });
+    addToCart({ id: "milk", name: "Fresh Milk", meta: "1 L", price: 120, icon: "🥛" });
     showToast("Milk added. You just unlocked 50 extra points!");
     render();
   });
@@ -1271,7 +1525,7 @@ function renderCart() {
   deliveryBlock.className = "glow-card";
   deliveryBlock.style.background = "#fdfaf2";
   deliveryBlock.innerHTML = `
-    <div style="font-weight:600; margin-bottom:6px;">Delivery & Payment</div>
+    <div style="font-weight:600; margin-bottom:6px;">Delivery</div>
     <div style="display:flex; gap:8px; margin-bottom:8px;">
       <button data-method="pickup" class="glow-btn ${deliveryMethod === "pickup" ? "accept" : ""}">Pickup at hub</button>
       <button data-method="delivery" class="glow-btn ${deliveryMethod === "delivery" ? "accept" : ""}">Home delivery</button>
@@ -1279,22 +1533,10 @@ function renderCart() {
     <div style="font-size:13px; margin-bottom:6px;">
       ${deliveryMethod === "delivery" ? "Delivery: KSh 100 · Use your saved location or drop a pin." : "Pickup free at TRM, Westlands or CBD hubs."}
     </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button data-pay="mpesa" class="glow-btn ${paymentMethod === "mpesa" ? "accept" : ""}">M-Pesa</button>
-      <button data-pay="card" class="glow-btn ${paymentMethod === "card" ? "accept" : ""}">Card</button>
-      <button data-pay="cod" class="glow-btn ${paymentMethod === "cod" ? "accept" : ""}">Pay on delivery</button>
-    </div>
   `;
   deliveryBlock.querySelectorAll("[data-method]").forEach((btn) => {
     btn.addEventListener("click", () => {
       deliveryMethod = btn.getAttribute("data-method");
-      render();
-    });
-  });
-  deliveryBlock.querySelectorAll("[data-pay]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      paymentMethod = btn.getAttribute("data-pay");
-      showToast(`Paying with ${paymentMethod === "mpesa" ? "M-Pesa" : paymentMethod === "card" ? "card" : "cash on delivery"}`);
       render();
     });
   });
@@ -1314,69 +1556,140 @@ function renderCart() {
       return;
     }
 
-    const payload = {
-      email: currentUser.email,
-      items: cart.map((item) => ({
-        productId: item.id,
-        qty: item.qty,
-      })),
-      deliveryMethod,
-      paymentMethod,
-      totals: { subtotal, discountTotal, deliveryFee, total },
+    const startPayment = (method) => {
+      paymentMethod = method;
+      const payload = {
+        email: currentUser.email,
+        items: cart.map((item) => ({
+          productId: item.id,
+          qty: item.qty,
+        })),
+        deliveryMethod,
+        paymentMethod,
+        address: deliveryAddress || null,
+        totals: { subtotal, discountTotal, deliveryFee, total },
+      };
+
+      // Centered loader overlay while processing payment
+      const processingOverlay = document.createElement("div");
+      processingOverlay.className = "processing-overlay";
+      processingOverlay.innerHTML = `
+        <div class="processing-card">
+          <div class="processing-spinner"></div>
+          <div style="margin-top:10px; font-weight:600;">Processing payment...</div>
+          <div style="margin-top:4px; font-size:12px; color:#647067;">This is a demo flow, no real money is charged.</div>
+        </div>
+      `;
+      document.body.appendChild(processingOverlay);
+
+      fetch(`${API_BASE}/api/orders`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      })
+        .then(async (res) => {
+          if (res.status === 401) {
+            currentUser = null;
+            localStorage.removeItem("jikoniUser");
+            showToast("Session expired. Please log in again.");
+            currentScreen = SCREENS.AUTH_CHOICE;
+            render();
+            throw new Error("unauthorized");
+          }
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || "Could not place order");
+          }
+          return res.json();
+        })
+        .then((data) => {
+          if (processingOverlay.parentNode) processingOverlay.remove();
+          const name = currentUser?.name || "rafiki";
+          const awarded = data.awardedPoints ?? 0;
+          if (typeof data.points === "number" && typeof data.streak === "number") {
+            loyaltyState.points = data.points;
+            loyaltyState.streak = data.streak;
+            loyaltyState.toNextReward = Math.max(0, 100 - data.points);
+          }
+          lastOrderSummary = {
+            id: data.orderId,
+            total,
+            awarded,
+            points: loyaltyState.points,
+            streak: loyaltyState.streak,
+            placedAt: data.createdAt || new Date().toISOString(),
+          };
+          cart = [];
+          saveCart();
+          currentScreen = SCREENS.ORDER_SUCCESS;
+          render();
+        })
+        .catch((err) => {
+          console.error(err);
+          if (processingOverlay.parentNode) processingOverlay.remove();
+          showToast(err.message || "Order failed, please try again.");
+        });
     };
 
-    fetch(`${API_BASE}/api/orders`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify(payload),
-    })
-      .then(async (res) => {
-        if (res.status === 401) {
-          currentUser = null;
-          localStorage.removeItem("jikoniUser");
-          showToast("Session expired. Please log in again.");
-          currentScreen = SCREENS.AUTH_CHOICE;
-          render();
-          throw new Error("unauthorized");
-        }
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.message || "Could not place order");
-        }
-        return res.json();
-      })
-      .then((data) => {
-        const name = currentUser?.name || "rafiki";
-        const awarded = data.awardedPoints ?? 0;
-        if (typeof data.points === "number" && typeof data.streak === "number") {
-          loyaltyState.points = data.points;
-          loyaltyState.streak = data.streak;
-          loyaltyState.toNextReward = Math.max(0, 100 - data.points);
-        }
-        lastOrderSummary = {
-          id: data.orderId,
-          total,
-          awarded,
-          points: loyaltyState.points,
-          streak: loyaltyState.streak,
-        };
-        cart = [];
-        saveCart();
-        currentScreen = SCREENS.ORDER_SUCCESS;
-        render();
-      })
-      .catch((err) => {
-        console.error(err);
-        showToast(err.message || "Order failed, please try again.");
+    // Show a simple payment method chooser sheet
+    const overlay = document.createElement("div");
+    overlay.className = "bot-overlay";
+    const sheet = document.createElement("div");
+    sheet.className = "bot-sheet";
+    sheet.innerHTML = `
+      <div class="bot-header">
+        <div class="bot-title">Choose payment method</div>
+        <button class="icon-btn" style="width:26px;height:26px;">✕</button>
+      </div>
+      <div class="bot-messages">
+        <button class="primary-btn" data-method="mpesa" style="margin-bottom:8px;">M‑Pesa</button>
+        <button class="secondary-btn" data-method="card" style="margin-bottom:8px;">Card</button>
+        <button class="secondary-btn" data-method="paystack">Paystack</button>
+      </div>
+    `;
+    sheet.querySelector(".icon-btn").onclick = () => overlay.remove();
+    sheet.querySelectorAll("[data-method]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const method = btn.getAttribute("data-method");
+        showToast(
+          method === "mpesa"
+            ? "Processing M‑Pesa payment..."
+            : method === "card"
+            ? "Processing card payment..."
+            : "Processing Paystack payment..."
+        );
+        overlay.remove();
+        startPayment(method);
       });
+    });
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
   };
+
+  const addressBlock = document.createElement("div");
+  addressBlock.className = "glow-card";
+  addressBlock.style.background = "#fdfaf2";
+  addressBlock.innerHTML = `
+    <div style="font-weight:600; margin-bottom:6px;">Delivery address</div>
+    <div style="font-size:13px; margin-bottom:6px;">Tell us where to bring your order (estate, building, house number).</div>
+    <input class="field-input" placeholder="e.g. Thika Road, TRM area, House 12" value="${deliveryAddress || ""}" />
+  `;
+  const addressInput = addressBlock.querySelector("input");
+  addressInput.addEventListener("input", (e) => {
+    deliveryAddress = e.target.value.trim();
+  });
+  addressInput.addEventListener("blur", () => {
+    saveAddress();
+  });
 
   wrap.appendChild(header);
   wrap.appendChild(list);
   if (cart.length) {
     wrap.appendChild(summary);
-    wrap.appendChild(deliveryBlock);
+    // Show glow card just above delivery & payment section
     wrap.appendChild(glow);
+    wrap.appendChild(addressBlock);
+    wrap.appendChild(deliveryBlock);
     wrap.appendChild(payBtn);
   }
   return wrap;
@@ -1420,6 +1733,81 @@ function renderLoyalty() {
       )}%;"></div>
     </div>
   `;
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function renderNotifications() {
+  const wrap = document.createElement("div");
+  wrap.className = "cart-screen";
+
+  const header = document.createElement("div");
+  header.className = "cart-header";
+  header.innerHTML = `
+    <div class="cart-title">Notifications</div>
+    <button class="secondary-btn" style="width:auto; padding:8px 14px;">Back</button>
+  `;
+  const backBtn = header.querySelector("button");
+  backBtn.onclick = () => {
+    currentScreen = SCREENS.HOME;
+    render();
+  };
+
+  const body = document.createElement("div");
+  body.className = "loyalty-widget";
+  body.style.display = "flex";
+  body.style.flexDirection = "column";
+  body.style.gap = "10px";
+
+  const prefsCard = document.createElement("div");
+  prefsCard.style.cssText =
+    "background:white; border-radius:14px; padding:10px 12px; border:1px solid #e0e0e0; font-size:13px;";
+  prefsCard.innerHTML = `
+    <div style="font-weight:600; margin-bottom:4px;">Notification preferences</div>
+    <label style="display:flex; align-items:center; gap:6px; margin-top:4px; font-size:13px;">
+      <input type="checkbox" ${notificationPrefs.streakReminders ? "checked" : ""} />
+      Streak & loyalty reminders
+    </label>
+    <label style="display:flex; align-items:center; gap:6px; margin-top:4px; font-size:13px;">
+      <input type="checkbox" ${notificationPrefs.hamperAlerts ? "checked" : ""} />
+      Surprise hamper & glow offers
+    </label>
+  `;
+  const [streakToggle, hamperToggle] = prefsCard.querySelectorAll("input");
+  streakToggle.addEventListener("change", () => {
+    notificationPrefs.streakReminders = streakToggle.checked;
+    saveNotificationPrefs();
+    showToast("Streak reminder preference updated.");
+  });
+  hamperToggle.addEventListener("change", () => {
+    notificationPrefs.hamperAlerts = hamperToggle.checked;
+    saveNotificationPrefs();
+    showToast("Hamper alerts preference updated.");
+  });
+
+  const listCard = document.createElement("div");
+  listCard.style.cssText =
+    "background:white; border-radius:14px; padding:10px 12px; border:1px solid #e0e0e0; font-size:13px;";
+  listCard.innerHTML = `
+    <div style="font-weight:600; margin-bottom:6px;">Recent notifications</div>
+    <div style="margin-bottom:6px;">
+      <div style="font-weight:500;">🎁 New glow hamper available</div>
+      <div style="font-size:12px; color:#647067;">Tap Home to see today’s surprise hamper and streak-friendly combos.</div>
+    </div>
+    <div style="margin-bottom:6px;">
+      <div style="font-weight:500;">🛵 Order tracking</div>
+      <div style="font-size:12px; color:#647067;">Your latest order status appears on the Home screen when active.</div>
+    </div>
+    <div>
+      <div style="font-weight:500;">⭐ Loyalty update</div>
+      <div style="font-size:12px; color:#647067;">You’ll see new points & streak changes on the Loyalty page after every order.</div>
+    </div>
+  `;
+
+  body.appendChild(prefsCard);
+  body.appendChild(listCard);
+
   wrap.appendChild(header);
   wrap.appendChild(body);
   return wrap;
@@ -1538,6 +1926,21 @@ function renderOrderSuccess() {
       <div style="margin-top:4px; font-size:13px;">You can view your recent orders from your profile.</div>
     `;
   } else {
+    const placedAt = lastOrderSummary.placedAt
+      ? new Date(lastOrderSummary.placedAt)
+      : new Date();
+    const now = new Date();
+    const minutes = Math.max(
+      0,
+      Math.floor((now.getTime() - placedAt.getTime()) / 60000)
+    );
+    // Simple time-based tracking states
+    let stage = 0;
+    if (minutes >= 0) stage = 1; // received
+    if (minutes >= 3) stage = 2; // preparing
+    if (minutes >= 8) stage = 3; // on the way
+    if (minutes >= 15) stage = 4; // near you
+
     body.innerHTML = `
       <div>Asante, ${currentUser?.name || "rafiki"}! 🍅🚚</div>
       <div style="margin-top:4px; font-size:13px;">Order #${
@@ -1546,6 +1949,38 @@ function renderOrderSuccess() {
       <div style="margin-top:4px; font-size:13px;">You earned ${
         lastOrderSummary.awarded
       } pts · Balance ${lastOrderSummary.points ?? 0} pts.</div>
+      <div style="margin-top:10px; font-size:13px; font-weight:600;">Live order tracking</div>
+      <div style="margin-top:6px; font-size:12px; color:#647067;">
+        ${stage === 1 ? "We’ve received your order at the nearest Jikoni hub." :
+          stage === 2 ? "Your order is being picked & packed." :
+          stage === 3 ? "Your rider has left the hub and is on the way." :
+          "Your rider is near your place. Tafadhali keep your phone close."}
+      </div>
+      <div style="margin-top:10px; display:flex; gap:8px; align-items:flex-start;">
+        <div style="flex:2;">
+          <div style="display:flex; justify-content:space-between; font-size:11px; color:#647067; margin-bottom:6px;">
+            <span>Received</span><span>Prepping</span><span>On the way</span><span>Near you</span>
+          </div>
+          <div style="position:relative; height:6px; border-radius:999px; background:rgba(21,53,47,0.18); overflow:hidden;">
+            <div style="height:100%; width:${(stage / 4) * 100}%; background:linear-gradient(90deg,#22c55e,#f97316);"></div>
+          </div>
+        </div>
+        <div style="flex:1; text-align:right; font-size:11px; color:#647067;">
+          ~${8 + (deliveryMethod === "delivery" ? 5 : 0)} min from hub
+        </div>
+      </div>
+      <div style="margin-top:10px; border-radius:14px; background:#fdfaf2; padding:10px; display:flex; gap:10px; align-items:center; font-size:12px;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600; margin-bottom:4px;">Jikoni Hub → Your place</div>
+          <div style="color:#647067;">This is a mock route for now, but feels like Glovo-style tracking.</div>
+        </div>
+        <div style="width:90px; height:70px; border-radius:10px; background:linear-gradient(135deg,#e5e7eb,#f97316); position:relative; overflow:hidden;">
+          <div style="position:absolute; left:10px; top:10px; width:6px; height:6px; border-radius:999px; background:#16a34a;"></div>
+          <div style="position:absolute; right:10px; bottom:10px; width:6px; height:6px; border-radius:999px; background:#0ea5e9;"></div>
+          <div style="position:absolute; left:12px; top:12px; right:16px; bottom:16px; border-radius:999px; border:2px dashed rgba(15,23,42,0.4);"></div>
+          <div style="position:absolute; left:${15 + (stage / 4) * 45}px; top:${15 + (stage / 4) * 25}px; font-size:18px;">🛵</div>
+        </div>
+      </div>
     `;
   }
 
@@ -1865,6 +2300,7 @@ function renderSearch() {
             name: p.name,
             meta: p.unit,
             price: p.price,
+            icon: p.icon,
           });
           saveCart();
           showToast(`${p.name} added`);
@@ -1888,6 +2324,7 @@ function renderSearch() {
             name: p.name,
             meta: p.unit,
             price: p.price,
+            icon: p.icon,
           });
           saveCart();
           showToast(`${p.name} added to cart`);
@@ -2128,19 +2565,19 @@ function updateHeroMessageDom() {
   if (currentScreen !== SCREENS.HOME) return;
   const heroMessages = [
     {
-      title: "🥬 Fresh Sukuma at 20% off today",
-      sub: "Perfect with ugali and a side of eggs.",
-      pill: "20% OFF · Veggie Glow",
-    },
-    {
       title: "🎁 Surprise Hamper of the Hour",
-      sub: "Bananas, spinach & honey sachet · limited time hamper.",
+      sub: "Mixed veggies, pantry staples and a sweet treat · limited drops all day.",
       pill: "Glow Hamper · +Extra pts",
     },
     {
+      title: "🚗 Free delivery over KSh 800",
+      sub: "Shop your weekly basics and we’ll cover delivery from the nearest hub.",
+      pill: "Delivery Glow · 🚙",
+    },
+    {
       title: "🍲 Supper Starter Kit",
-      sub: "Tomatoes, onions & sukuma in one quick combo.",
-      pill: "Save KSh 60 · Combo Glow",
+      sub: "Tomatoes, onions & sukuma in one combo · save KSh 60 tonight.",
+      pill: "Combo Glow · Save KSh 60",
     },
   ];
   const hero = heroMessages[heroIndex % heroMessages.length];

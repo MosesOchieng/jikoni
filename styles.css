@@ -362,10 +362,10 @@ body {
 .auth-header {
   margin-top: 24px;
   padding: 24px 20px 20px;
-  border-radius: 20px;
-  background: #fdfaf2;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 24px;
+  background: radial-gradient(circle at top left, #fee2c5, #fdfaf2 40%, #f6f2e7 100%);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .auth-title {
@@ -422,6 +422,125 @@ body {
 .auth-helper {
   font-size: 12px;
   color: #7a847f;
+}
+
+/* 4-digit verification code boxes */
+.code-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.code-input {
+  max-width: 56px;
+  text-align: center;
+  font-size: 20px;
+  padding: 10px 0;
+}
+
+.link-btn {
+  margin-top: 4px;
+  border: none;
+  background: transparent;
+  color: #0d3b32;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+/* Hero glow icons row on home */
+.hero-glow-icons {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  font-size: 18px;
+}
+
+/* Centered processing overlay for payments */
+.processing-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.processing-card {
+  background: #fdfaf2;
+  border-radius: 18px;
+  padding: 18px 20px 16px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  min-width: 240px;
+  max-width: 320px;
+  text-align: center;
+}
+
+.processing-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 3px solid rgba(15, 23, 42, 0.15);
+  border-top-color: #f97316;
+  margin: 0 auto;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Responsive tweaks for small screens */
+@media (max-width: 480px) {
+  .app-shell {
+    padding: 14px 12px 72px;
+  }
+
+  .home {
+    gap: 14px;
+  }
+
+  .section-title {
+    font-size: 15px;
+  }
+
+  .category-row {
+    gap: 8px;
+  }
+
+  .category-chip {
+    min-width: 0;
+    max-width: 110px;
+    font-size: 12px;
+  }
+
+  .product-card {
+    min-width: 140px;
+  }
+
+  .browse-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .product-tile {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .cart-item-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .glow-card {
+    font-size: 12px;
+  }
+
+  .auth-header {
+    margin-top: 16px;
+    padding: 20px 16px 18px;
+  }
 }
 
 .home-header {
@@ -579,10 +698,11 @@ body {
 }
 
 .category-chip {
-  min-width: 80px;
-  padding: 12px 12px;
+  min-width: 90px;
+  max-width: 130px;
+  padding: 10px 12px;
   border-radius: 16px;
-  background: #fdfaf2;
+  background: linear-gradient(135deg, #fdfaf2, #f6f2e7);
   border: 2px solid #ded2b9;
   text-align: center;
   font-size: 13px;
@@ -590,6 +710,8 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .category-chip:hover {
@@ -648,7 +770,7 @@ body {
 }
 
 .product-card {
-  min-width: 140px;
+  min-width: 150px;
   background: #fdfaf2;
   border-radius: 18px;
   padding: 12px 10px 12px;
@@ -661,6 +783,7 @@ body {
 .product-name {
   font-size: 14px;
   font-weight: 600;
+  word-wrap: break-word;
 }
 
 .product-meta {
@@ -1110,7 +1233,8 @@ body {
 .cart-item-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 8px;
   padding: 10px 12px;
   border-radius: 14px;
   background: #fdfaf2;
@@ -1120,6 +1244,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
 }
 
 .cart-item-name {

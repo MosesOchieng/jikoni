@@ -33,13 +33,13 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => {
           // Network failed – fall back to cache if we have it
-          if (cached) return cached;
+      if (cached) return cached;
           // Last resort: empty offline response instead of crashing SW
           return new Response("", {
             status: 504,
             statusText: "Offline",
           });
-        })
+    })
     )
   );
 });

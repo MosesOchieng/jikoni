@@ -33,9 +33,9 @@ const shouldResetDb =
 
 db.serialize(() => {
   if (shouldResetDb) {
-    db.run(`DROP TABLE IF EXISTS users`);
-    db.run(`DROP TABLE IF EXISTS products`);
-    db.run(`DROP TABLE IF EXISTS orders`);
+  db.run(`DROP TABLE IF EXISTS users`);
+  db.run(`DROP TABLE IF EXISTS products`);
+  db.run(`DROP TABLE IF EXISTS orders`);
   }
   db.run(
     `CREATE TABLE IF NOT EXISTS users (
@@ -94,6 +94,12 @@ db.serialize(() => {
         ["maize_flour", "Maize Flour", "Flour", 200, "2 kg", "🌽", "combo"],
         ["rice", "Pishori Rice", "Cereals", 260, "2 kg", "🍚", "combo"],
         ["beans", "Rosecoco Beans", "Cereals", 220, "1 kg", "🫘", "expiry"],
+        ["bread", "Fresh Bread Loaf", "Breakfast", 70, "400 g", "🍞", "combo"],
+        ["sugar", "Sugar", "Pantry", 150, "1 kg", "🧃", "expiry"],
+        ["salt", "Table Salt", "Pantry", 40, "500 g", "🧂", "combo"],
+        ["oil", "Cooking Oil", "Pantry", 350, "1 L", "🛢️", "loyalty"],
+        ["chapati", "Chapati Pack", "Ready to Eat", 200, "10 pcs", "🥙", "combo"],
+        ["ugali_mix", "Ugali & Greens Combo", "Combos", 260, "serves 2", "🥗", "combo"],
       ];
       const stmt = db.prepare(
         "INSERT INTO products (id, name, category, price, unit, icon, glowType) VALUES (?, ?, ?, ?, ?, ?, ?)"
@@ -127,20 +133,15 @@ function authRequired(req, res, next) {
 }
 
 // ----- Mail setup (Nodemailer) -----
-// Use real SMTP if configured via environment variables, otherwise JSON transport for development
-const mailer = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || "587"),
-      secure: process.env.SMTP_PORT === "465",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    })
-  : nodemailer.createTransport({
-      jsonTransport: true, // logs email content instead of actually sending; configure SMTP_* env vars for production
-    });
+// For this demo we hard-code a Gmail app password so emails actually send.
+// NOTE: In real projects you should ALWAYS use environment variables instead.
+const mailer = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "mosesochiengopiyo@gmail.com",
+    pass: "yzun vogl hrpz nylc",
+  },
+});
 
 // ----- In-memory data (hubs / carts can stay in memory for now) -----
 const hubs = [
@@ -198,7 +199,8 @@ app.post("/api/auth/signup", (req, res) => {
     return res.status(400).json({ message: "Name, email and password required" });
   }
 
-  const otp = String(Math.floor(1000 + Math.random() * 9000));
+  // Generate a 6-digit verification code
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
   const passwordHash = bcrypt.hashSync(password, 10);
 
   // Upsert user manually to avoid ON CONFLICT quirks
@@ -214,7 +216,7 @@ app.post("/api/auth/signup", (req, res) => {
         return res.status(500).json({ message: "Could not start signup" });
       }
 
-      // Send email with Nodemailer
+      // Send verification email with Nodemailer
       mailer.sendMail(
         {
           to: email,
@@ -236,8 +238,8 @@ app.post("/api/auth/signup", (req, res) => {
         }
       );
 
-      // For now, also return the OTP in the response so the PWA can show it while testing
-      res.json({ message: "OTP sent", email, code: otp });
+      // Do NOT return the OTP in the API response – only send it via email
+      res.json({ message: "OTP sent", email });
     };
 
     if (!existing) {
@@ -280,12 +282,75 @@ app.post("/api/auth/verify", (req, res) => {
           console.error("Verify update error", updateErr);
           return res.status(500).json({ message: "Verification failed" });
         }
+
+        // Send a simple welcome email after successful verification
+        mailer.sendMail(
+          {
+            to: email,
+            from: process.env.SMTP_FROM || "no-reply@jikoni.app",
+            subject: "Welcome to Jikoni",
+            text: `Hi ${user.name},\n\nKaribu Jikoni! Your email has been verified.\nYou can now log in, keep your streaks, and earn points on every order.\n\nAsante,\nThe Jikoni team`,
+          },
+          (mailErr) => {
+            if (mailErr) {
+              console.error("Welcome mail error", mailErr);
+            }
+          }
+        );
+
         const token = signToken(user);
         res.json({
           message: "Verified",
           user: { id: user.id, name: user.name, email: user.email },
           token,
         });
+      }
+    );
+  });
+});
+
+// Forgot password - request reset code
+app.post("/api/auth/forgot", (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: "Email required" });
+  }
+
+  db.get("SELECT * FROM users WHERE email = ?", [email], (err, user) => {
+    if (err) {
+      console.error("Forgot password lookup error", err);
+      return res.status(500).json({ message: "Could not start reset" });
+    }
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+
+    db.run(
+      "UPDATE users SET otp = ? WHERE email = ?",
+      [otp, email],
+      (updateErr) => {
+        if (updateErr) {
+          console.error("Forgot password save error", updateErr);
+          return res.status(500).json({ message: "Could not start reset" });
+        }
+
+        mailer.sendMail(
+          {
+            to: email,
+            from: process.env.SMTP_FROM || "no-reply@jikoni.app",
+            subject: "Reset your Jikoni password",
+            text: `Hi ${user.name},\n\nYou requested to reset your Jikoni password.\nYour reset code is: ${otp}\n\nIf you did not request this, you can ignore this email.\n`,
+          },
+          (mailErr) => {
+            if (mailErr) {
+              console.error("Reset mail error", mailErr);
+            }
+          }
+        );
+
+        res.json({ message: "Reset code sent", email });
       }
     );
   });
@@ -471,6 +536,7 @@ app.post("/api/orders", authRequired, (req, res) => {
                 awardedPoints: basePoints + bonus,
                 streak: newStreak,
                 points: newPoints,
+                createdAt,
               });
             }
           );
