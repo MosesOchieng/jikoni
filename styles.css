@@ -20,7 +20,7 @@ body {
 }
 
 .loader-screen {
-  min-height: calc(100vh - 56px);
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -53,6 +53,12 @@ body {
   margin: 0 auto;
   background: #f6f2e7;
   padding: 18px 18px 80px;
+}
+
+/* Full-bleed layout for splash / loader screens */
+.app-shell--fullscreen {
+  padding: 0;
+  max-width: none;
 }
 
 .top-bar {
@@ -96,7 +102,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  min-height: calc(100vh - 56px);
+  min-height: 100vh;
   animation: fadeIn 0.5s ease-out;
   position: relative;
   padding: 24px 18px 32px;

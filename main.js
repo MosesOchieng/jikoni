@@ -255,43 +255,50 @@ function render() {
   root.innerHTML = "";
 
   const shell = document.createElement("div");
-  shell.className = "app-shell";
+  // Full-bleed layout and no top bar on loader / splash screens
+  const isSplashLike =
+    currentScreen === SCREENS.LOADER ||
+    currentScreen === SCREENS.SPLASH_1 ||
+    currentScreen === SCREENS.SPLASH_2;
+  shell.className = isSplashLike ? "app-shell app-shell--fullscreen" : "app-shell";
 
-  const topBar = document.createElement("div");
-  topBar.className = "top-bar";
-  const logo = document.createElement("div");
-  logo.className = "logo-mark";
-  logo.innerHTML = `<img src="/public/logo.png" alt="Jikoni" class="logo-img" />`;
-  const icons = document.createElement("div");
-  icons.className = "top-icons";
+  if (!isSplashLike) {
+    const topBar = document.createElement("div");
+    topBar.className = "top-bar";
+    const logo = document.createElement("div");
+    logo.className = "logo-mark";
+    logo.innerHTML = `<img src="/public/logo.png" alt="Jikoni" class="logo-img" />`;
+    const icons = document.createElement("div");
+    icons.className = "top-icons";
 
-  const bell = document.createElement("button");
-  bell.className = "icon-btn";
-  bell.textContent = "🔔";
-  bell.onclick = () => showToast("Notifications coming soon");
+    const bell = document.createElement("button");
+    bell.className = "icon-btn";
+    bell.textContent = "🔔";
+    bell.onclick = () => showToast("Notifications coming soon");
 
-  const profileBtn = document.createElement("button");
-  profileBtn.className = "icon-btn";
-  profileBtn.textContent = "👤";
-  profileBtn.onclick = () => {
-    currentScreen = SCREENS.PROFILE;
-    render();
-  };
+    const profileBtn = document.createElement("button");
+    profileBtn.className = "icon-btn";
+    profileBtn.textContent = "👤";
+    profileBtn.onclick = () => {
+      currentScreen = SCREENS.PROFILE;
+      render();
+    };
 
-  const cartIcon = document.createElement("button");
-  cartIcon.className = "icon-btn";
-  cartIcon.textContent = "🛒";
-  cartIcon.onclick = () => {
-    currentScreen = SCREENS.CART;
-    render();
-  };
+    const cartIcon = document.createElement("button");
+    cartIcon.className = "icon-btn";
+    cartIcon.textContent = "🛒";
+    cartIcon.onclick = () => {
+      currentScreen = SCREENS.CART;
+      render();
+    };
 
-  icons.appendChild(bell);
-  icons.appendChild(profileBtn);
-  icons.appendChild(cartIcon);
-  topBar.appendChild(logo);
-  topBar.appendChild(icons);
-  shell.appendChild(topBar);
+    icons.appendChild(bell);
+    icons.appendChild(profileBtn);
+    icons.appendChild(cartIcon);
+    topBar.appendChild(logo);
+    topBar.appendChild(icons);
+    shell.appendChild(topBar);
+  }
 
   if (currentScreen === SCREENS.LOADER) {
     shell.appendChild(renderLoader());
@@ -2108,6 +2115,7 @@ if ("serviceWorker" in navigator) {
 }
 
 window.addEventListener("beforeinstallprompt", (e) => {
+  // Android / desktop Chrome install prompt
   e.preventDefault();
   deferredInstallPrompt = e;
   renderInstallSheet();
@@ -2173,13 +2181,27 @@ setInterval(() => {
 }, 7000);
 render();
 
+function isIOS() {
+  const ua = window.navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod/.test(ua);
+}
+
+function isInStandaloneMode() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+}
+
 function renderInstallSheet() {
   const existing = document.querySelector(".install-sheet");
-  if (!deferredInstallPrompt) {
-    if (existing) existing.remove();
+  if (existing) existing.remove();
+
+  // If already installed, don't show anything
+  if (isInStandaloneMode()) return;
+
+  // For iOS Safari there is no beforeinstallprompt, show instructions instead
+  const showIosInstructions = !deferredInstallPrompt && isIOS();
+  if (!deferredInstallPrompt && !showIosInstructions) {
     return;
   }
-  if (existing) existing.remove();
 
   const sheet = document.createElement("div");
   sheet.className = "install-sheet";
@@ -2187,28 +2209,38 @@ function renderInstallSheet() {
     <div class="install-sheet-inner">
       <img src="/public/logo.png" alt="Jikoni" class="install-sheet-logo" />
       <div class="install-sheet-text">
-        Install <strong>Jikoni</strong> for faster access to your groceries and hampers.
+        ${
+          showIosInstructions
+            ? `Install <strong>Jikoni</strong> on your home screen for a full-screen app experience.<br/><br/><strong>On iPhone:</strong> Tap the share icon in Safari, then “Add to Home Screen”.`
+            : `Install <strong>Jikoni</strong> for faster access to your groceries and hampers.`
+        }
       </div>
       <div class="install-sheet-actions">
-        <button class="install-btn">Install</button>
+        ${
+          showIosInstructions
+            ? ""
+            : '<button class="install-btn">Install</button>'
+        }
         <button class="install-dismiss">Not now</button>
       </div>
     </div>
   `;
 
-  const installBtn = sheet.querySelector(".install-btn");
   const dismissBtn = sheet.querySelector(".install-dismiss");
 
-  installBtn.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    const choice = await deferredInstallPrompt.userChoice.catch(() => null);
-    deferredInstallPrompt = null;
-    sheet.remove();
-    if (choice && choice.outcome === "accepted") {
-      showToast("Jikoni installed. Asante!");
-    }
-  });
+  if (!showIosInstructions) {
+    const installBtn = sheet.querySelector(".install-btn");
+    installBtn.addEventListener("click", async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+      deferredInstallPrompt = null;
+      sheet.remove();
+      if (choice && choice.outcome === "accepted") {
+        showToast("Jikoni installed. Asante!");
+      }
+    });
+  }
 
   dismissBtn.addEventListener("click", () => {
     deferredInstallPrompt = null;
