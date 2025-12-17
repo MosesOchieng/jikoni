@@ -1410,36 +1410,37 @@ function renderOrderTracking() {
   mapContainer.style.position = "relative";
   mapContainer.style.background = "#e5e0d5";
 
-  // Status overlay - persistent and user-controlled
+  // Status overlay - persistent and user-controlled, positioned at top
   let isOverlayMinimized = false;
   const statusOverlay = document.createElement("div");
   statusOverlay.id = "order-status-overlay";
   statusOverlay.style.position = "absolute";
-  statusOverlay.style.bottom = "0";
+  statusOverlay.style.top = "0";
   statusOverlay.style.left = "0";
   statusOverlay.style.right = "0";
   statusOverlay.style.background = "#ffffff";
-  statusOverlay.style.borderRadius = "24px 24px 0 0";
+  statusOverlay.style.borderRadius = "0 0 24px 24px";
   statusOverlay.style.padding = "24px";
-  statusOverlay.style.zIndex = "100";
-  statusOverlay.style.boxShadow = "0 -8px 32px rgba(0,0,0,0.15)";
+  statusOverlay.style.zIndex = "1000";
+  statusOverlay.style.boxShadow = "0 8px 32px rgba(0,0,0,0.15)";
   statusOverlay.style.transition = "transform 0.3s ease-out";
   statusOverlay.style.maxHeight = "60vh";
   statusOverlay.style.overflowY = "auto";
+  statusOverlay.style.pointerEvents = "auto";
   
   // Minimize/maximize button
   const toggleBtn = document.createElement("button");
-  toggleBtn.style.cssText = "position: absolute; top: 16px; right: 16px; background: #f6f2e7; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #0d3b32; z-index: 101;";
-  toggleBtn.innerHTML = "▼";
+  toggleBtn.style.cssText = "position: absolute; top: 16px; right: 16px; background: #f6f2e7; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #0d3b32; z-index: 1001;";
+  toggleBtn.innerHTML = "▲";
   toggleBtn.onclick = () => {
     isOverlayMinimized = !isOverlayMinimized;
     if (isOverlayMinimized) {
-      statusOverlay.style.transform = "translateY(calc(100% - 60px))";
-      toggleBtn.innerHTML = "▲";
+      statusOverlay.style.transform = "translateY(calc(-100% + 60px))";
+      toggleBtn.innerHTML = "▼";
       toggleBtn.style.top = "calc(100% - 52px)";
     } else {
       statusOverlay.style.transform = "translateY(0)";
-      toggleBtn.innerHTML = "▼";
+      toggleBtn.innerHTML = "▲";
       toggleBtn.style.top = "16px";
     }
   };
@@ -1492,6 +1493,7 @@ function renderOrderTracking() {
 
   container.appendChild(header);
   container.appendChild(mapContainer);
+  // Append status overlay to mapContainer so it stays above the map
   mapContainer.appendChild(statusOverlay);
 
   // Store map reference for updates
@@ -1824,17 +1826,38 @@ function renderOrderTracking() {
           "Your rider has arrived! 🎉"
         ];
 
-        const statusTitle = statusOverlay.querySelector('div[style*="font-size: 18px"]');
-        const statusDesc = statusOverlay.querySelector('div[style*="font-size: 14px"]');
-        const progressBar = statusOverlay.querySelector('div[style*="width:"]');
-        const etaText = statusOverlay.querySelector('div[style*="font-size: 14px; font-weight: 600; color: #f97316"]');
-        const iconDiv = statusOverlay.querySelector('div[style*="width: 48px"]');
-
+        // Update status title (font-size: 20px)
+        const statusTitle = statusOverlay.querySelector('div[style*="font-size: 20px"][style*="font-weight: 600"]');
         if (statusTitle) statusTitle.textContent = statusMessages[currentStage] || statusMessages[0];
+        
+        // Update status description (font-size: 15px)
+        const statusDesc = statusOverlay.querySelector('div[style*="font-size: 15px"][style*="color: #647067"]');
         if (statusDesc) statusDesc.textContent = statusDescriptions[currentStage] || statusDescriptions[0];
-        if (progressBar) progressBar.style.width = `${(currentStage / 4) * 100}%`;
-        if (etaText) etaText.textContent = `~${Math.max(5, 20 - currentMinutes)} min`;
+        
+        // Update progress bar width
+        const progressBarContainer = statusOverlay.querySelector('div[style*="position: relative"][style*="height: 10px"]');
+        if (progressBarContainer) {
+          const progressBar = progressBarContainer.querySelector('div[style*="height: 100%"]');
+          if (progressBar) progressBar.style.width = `${(currentStage / 4) * 100}%`;
+        }
+        
+        // Update ETA (font-size: 16px, color: #f97316)
+        const etaContainer = statusOverlay.querySelector('div[style*="font-size: 16px"][style*="font-weight: 600"][style*="color: #f97316"]');
+        if (etaContainer) etaContainer.textContent = `~${Math.max(5, 20 - currentMinutes)} min`;
+        
+        // Update icon (width: 56px, height: 56px)
+        const iconDiv = statusOverlay.querySelector('div[style*="width: 56px"][style*="height: 56px"][style*="border-radius: 50%"]');
         if (iconDiv) iconDiv.innerHTML = currentStage >= 4 ? "✅" : "🛵";
+        
+        // Update status labels (the spans in the progress section)
+        const statusLabels = statusOverlay.querySelectorAll('span[style*="font-weight"]');
+        statusLabels.forEach((label, idx) => {
+          if (idx < statusMessages.length) {
+            const isActive = currentStage >= idx;
+            label.style.fontWeight = isActive ? '600' : '400';
+            label.style.color = isActive ? '#0d3b32' : '#647067';
+          }
+        });
       };
 
       // Auto-update tracking every 5 seconds
