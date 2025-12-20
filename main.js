@@ -1483,22 +1483,20 @@ function renderOrderTracking() {
   statusOverlay.style.overflowY = "auto";
   statusOverlay.style.pointerEvents = "auto";
   
-  // Minimize/maximize button
+  // Minimize/maximize button - positioned at top of overlay (which is at bottom)
   const toggleBtn = document.createElement("button");
   toggleBtn.style.cssText = "position: absolute; top: 16px; right: 16px; background: #f6f2e7; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #0d3b32; z-index: 1001;";
-  toggleBtn.innerHTML = "▲";
+  toggleBtn.innerHTML = "▼";
   toggleBtn.onclick = () => {
     isOverlayMinimized = !isOverlayMinimized;
     if (isOverlayMinimized) {
       statusOverlay.style.transform = "translateY(calc(100% - 60px))";
       toggleBtn.innerHTML = "▲";
-      toggleBtn.style.bottom = "calc(100% - 52px)";
-      toggleBtn.style.top = "auto";
+      toggleBtn.style.top = "calc(100% - 52px)";
     } else {
       statusOverlay.style.transform = "translateY(0)";
       toggleBtn.innerHTML = "▼";
       toggleBtn.style.top = "16px";
-      toggleBtn.style.bottom = "auto";
     }
   };
 
@@ -1562,14 +1560,22 @@ function renderOrderTracking() {
   setTimeout(() => {
     if (typeof L !== 'undefined') {
       mapInstance = L.map('order-tracking-map', {
-        zoomControl: true,
-        attributionControl: true
+        zoomControl: false, // Disable zoom controls
+        attributionControl: false, // Hide attribution for cleaner look
+        dragging: false, // Disable panning
+        touchZoom: false, // Disable pinch zoom
+        doubleClickZoom: false, // Disable double-click zoom
+        scrollWheelZoom: false, // Disable scroll wheel zoom
+        boxZoom: false, // Disable box zoom
+        keyboard: false, // Disable keyboard navigation
+        tap: false // Disable tap on mobile
       }).setView([(hubCoords[0] + deliveryCoords[0]) / 2, (hubCoords[1] + deliveryCoords[1]) / 2], 13);
 
       // Add CartoDB Positron tiles for a cleaner, more classy look
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors, © CARTO',
+        maxZoom: 14, // Match the fixed zoom level
+        minZoom: 14, // Lock zoom level
+        attribution: '', // Hide attribution for cleaner look
         subdomains: 'abcd'
       }).addTo(mapInstance);
 
@@ -1799,11 +1805,37 @@ function renderOrderTracking() {
             lineJoin: 'round'
           }).addTo(mapInstance);
         }
+        
+        // Refit bounds after route is drawn to ensure all markers are visible
+        const routeBounds = L.latLngBounds(route.length > 2 ? route : [hubCoords, deliveryCoords]);
+        routeBounds.extend(hubCoords);
+        routeBounds.extend(deliveryCoords);
+        routeBounds.extend([riderLat, riderLng]);
+        
+        // Get current zoom to maintain it
+        const currentZoom = mapInstance.getZoom();
+        mapInstance.fitBounds(routeBounds, { 
+          padding: [120, 100], // Extra bottom padding for overlay
+          maxZoom: 14,
+          animate: false
+        });
+        
+        // Re-lock zoom level after refit
+        mapInstance.setMinZoom(currentZoom);
+        mapInstance.setMaxZoom(currentZoom);
       });
 
-      // Fit map to show both points
-      const bounds = L.latLngBounds([hubCoords, deliveryCoords]);
-      mapInstance.fitBounds(bounds, { padding: [50, 50] });
+      // Initial fit to show all markers before route loads - fixed zoom level
+      const initialBounds = L.latLngBounds([hubCoords, deliveryCoords, [riderLat, riderLng]]);
+      mapInstance.fitBounds(initialBounds, { 
+        padding: [100, 100],
+        maxZoom: 14, // Fixed zoom level
+        animate: false // No animation for smoother experience
+      });
+      
+      // Lock the zoom level after initial fit
+      mapInstance.setMinZoom(mapInstance.getZoom());
+      mapInstance.setMaxZoom(mapInstance.getZoom());
 
       // Function to create detailed rider popup content (accessible in update interval)
       const createRiderPopupContent = (currentStage, currentMinutes) => {

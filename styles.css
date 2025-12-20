@@ -1424,10 +1424,10 @@ body {
   z-index: 1;
 }
 
-/* Status overlay positioned at top, always visible */
+/* Status overlay positioned at bottom, always visible */
 #order-status-overlay {
   position: absolute !important;
-  top: 0 !important;
+  bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
   z-index: 1000 !important;
