@@ -1726,6 +1726,63 @@ function renderOrderTracking() {
           </div>
         `, { className: 'custom-popup' });
 
+      // Function to create detailed rider popup content (defined before use)
+      const createRiderPopupContent = (currentStage, currentMinutes) => {
+        const statusText = currentStage <= 1 ? "At hub" : currentStage >= 4 ? "Arriving soon!" : "On the way!";
+        const eta = Math.max(5, 20 - currentMinutes);
+        const distance = currentStage <= 1 ? "0 km" : currentStage >= 4 ? "< 1 km" : `${Math.round((1 - (currentStage - 1) / 3) * 5 * 10) / 10} km`;
+        
+        // Show rider details when order is picked (stage >= 2)
+        const riderDetails = currentStage >= 2 ? `
+          <div style="border-top: 1px solid #e5e0d5; padding-top: 12px; margin-top: 12px;">
+            <div style="font-size: 12px; color: #647067; margin-bottom: 8px; font-weight: 600;">Rider Details</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 12px; color: #647067;">Name</span>
+              <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">John M.</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 12px; color: #647067;">Phone</span>
+              <a href="tel:+254712345678" style="font-size: 13px; font-weight: 600; color: #0ea5e9; text-decoration: none;">+254 712 345 678</a>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="font-size: 12px; color: #647067;">Vehicle</span>
+              <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">Motorcycle</span>
+            </div>
+          </div>
+        ` : '';
+        
+        return `
+          <div style="padding: 12px; min-width: 200px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+              <div style="font-size: 32px;">🛵</div>
+              <div>
+                <div style="font-size: 16px; font-weight: 600; color: #0ea5e9; margin-bottom: 2px;">Your Rider</div>
+                <div style="font-size: 12px; color: #647067;">${statusText}</div>
+              </div>
+            </div>
+            <div style="border-top: 1px solid #e5e0d5; padding-top: 10px; margin-top: 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 12px; color: #647067;">Order #</span>
+                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">${lastOrderSummary.id}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 12px; color: #647067;">Total</span>
+                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">KSh ${lastOrderSummary.total}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 12px; color: #647067;">Distance</span>
+                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">${distance}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 12px; color: #647067;">ETA</span>
+                <span style="font-size: 13px; font-weight: 600; color: #f97316;">~${eta} min</span>
+              </div>
+            </div>
+            ${riderDetails}
+          </div>
+        `;
+      };
+
       // Always add rider marker - it will be visible from the start
       riderMarker = L.marker([riderLat, riderLng], { 
         icon: riderIcon, 
@@ -1836,67 +1893,6 @@ function renderOrderTracking() {
       // Lock the zoom level after initial fit
       mapInstance.setMinZoom(mapInstance.getZoom());
       mapInstance.setMaxZoom(mapInstance.getZoom());
-
-      // Function to create detailed rider popup content (accessible in update interval)
-      const createRiderPopupContent = (currentStage, currentMinutes) => {
-        const statusText = currentStage <= 1 ? "At hub" : currentStage >= 4 ? "Arriving soon!" : "On the way!";
-        const eta = Math.max(5, 20 - currentMinutes);
-        const distance = currentStage <= 1 ? "0 km" : currentStage >= 4 ? "< 1 km" : `${Math.round((1 - (currentStage - 1) / 3) * 5 * 10) / 10} km`;
-        
-        // Show rider details when order is picked (stage >= 2)
-        const riderDetails = currentStage >= 2 ? `
-          <div style="border-top: 1px solid #e5e0d5; padding-top: 12px; margin-top: 12px;">
-            <div style="font-size: 12px; color: #647067; margin-bottom: 8px; font-weight: 600;">Rider Details</div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="font-size: 12px; color: #647067;">Name</span>
-              <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">John M.</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="font-size: 12px; color: #647067;">Phone</span>
-              <a href="tel:+254712345678" style="font-size: 13px; font-weight: 600; color: #0ea5e9; text-decoration: none;">+254 712 345 678</a>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="font-size: 12px; color: #647067;">Vehicle</span>
-              <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">Motorcycle</span>
-            </div>
-          </div>
-        ` : '';
-        
-        return `
-          <div style="padding: 12px; min-width: 200px;">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-              <div style="font-size: 32px;">🛵</div>
-              <div>
-                <div style="font-size: 16px; font-weight: 600; color: #0ea5e9; margin-bottom: 2px;">Your Rider</div>
-                <div style="font-size: 12px; color: #647067;">${statusText}</div>
-              </div>
-            </div>
-            <div style="border-top: 1px solid #e5e0d5; padding-top: 10px; margin-top: 10px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 12px; color: #647067;">Order #</span>
-                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">${lastOrderSummary.id}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 12px; color: #647067;">Total</span>
-                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">KSh ${lastOrderSummary.total}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 12px; color: #647067;">Distance</span>
-                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">${distance}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="font-size: 12px; color: #647067;">ETA</span>
-                <span style="font-size: 13px; font-weight: 600; color: #f97316;">~${eta} min</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="font-size: 12px; color: #647067;">From</span>
-                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">${nearestHub?.name || "Mama Mboga Hub"}</span>
-              </div>
-            </div>
-            ${riderDetails}
-          </div>
-        `;
-      };
 
       // Function to update status overlay
       const updateStatusOverlay = (currentStage, currentMinutes) => {
