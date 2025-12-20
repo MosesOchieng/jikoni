@@ -299,7 +299,7 @@ function render() {
     topBar.className = "top-bar";
     const logo = document.createElement("div");
     logo.className = "logo-mark";
-    logo.innerHTML = `<img src="/public/logo.png" alt="Jikoni" class="logo-img" />`;
+    logo.innerHTML = `<img src="/public/logo.png" alt="Mama Mboga" class="logo-img" />`;
     const icons = document.createElement("div");
     icons.className = "top-icons";
 
@@ -321,7 +321,7 @@ function render() {
         if (botOpen && botMessages.length === 0) {
           botMessages.push({
             from: "bot",
-            text: "Hi, I'm Jikoni Bot. Try: \"What's on offer today?\" or \"Add eggs and sukuma.\"",
+            text: "Hi, I'm Mama Mboga Bot. Try: \"What's on offer today?\" or \"Add eggs and sukuma.\"",
           });
         }
         renderBotOverlay();
@@ -401,7 +401,7 @@ function renderLoader() {
   wrap.className = "loader-screen";
   wrap.innerHTML = `
     <div class="loader-inner">
-      <img src="/public/logo.png" alt="Jikoni" class="loader-logo" />
+      <img src="/public/logo.png" alt="Mama Mboga" class="loader-logo" />
       <div class="loader-spinner"></div>
     </div>
   `;
@@ -504,7 +504,7 @@ function renderSplash2() {
 
   const meta = document.createElement("div");
   meta.className = "splash-meta";
-  meta.textContent = "Install Jikoni as an app for faster access later.";
+  meta.textContent = "Install Mama Mboga as an app for faster access later.";
 
   footer.appendChild(primary);
   footer.appendChild(secondary);
@@ -523,9 +523,9 @@ function renderAuthChoice() {
   header.className = "auth-header";
   header.innerHTML = `
     <div style="display:flex; justify-content:center; margin-bottom:12px;">
-      <img src="/public/logo.png" alt="Jikoni" style="height:72px; border-radius:16px;" />
+      <img src="/public/logo.png" alt="Mama Mboga" style="height:72px; border-radius:16px;" />
     </div>
-    <div class="auth-title">Welcome to Jikoni</div>
+    <div class="auth-title">Welcome to Mama Mboga</div>
     <div class="auth-subtitle">Create an account with your email to track streaks, points, and hampers.</div>
   `;
 
@@ -534,7 +534,7 @@ function renderAuthChoice() {
   heroImage.style.borderRadius = "20px";
   heroImage.style.overflow = "hidden";
   heroImage.innerHTML = `
-    <img src="/public/jikoni.jpeg" alt="Jikoni groceries" style="width:100%; display:block;" />
+    <img src="/public/jikoni.jpeg" alt="Mama Mboga groceries" style="width:100%; display:block;" />
   `;
 
   const buttons = document.createElement("div");
@@ -575,7 +575,7 @@ function renderSignUp() {
   const header = document.createElement("div");
   header.className = "auth-header";
   header.innerHTML = `
-    <div class="auth-title">Create your Jikoni account</div>
+    <div class="auth-title">Create your Mama Mboga account</div>
     <div class="auth-subtitle">Sign up with the email you check often.</div>
   `;
 
@@ -706,7 +706,7 @@ function renderSignUp() {
       })
       .catch((err) => {
         console.error("Signup error:", err);
-        let errorMsg = err.message || "Could not reach Jikoni servers";
+        let errorMsg = err.message || "Could not reach Mama Mboga servers";
         
         // More helpful error messages
         if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.name === "TypeError") {
@@ -873,7 +873,7 @@ function renderLogin() {
       })
       .catch((err) => {
         console.error("Login error:", err);
-        let errorMsg = err.message || "Could not reach Jikoni servers";
+        let errorMsg = err.message || "Could not reach Mama Mboga servers";
         
         // More helpful error messages
         if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.name === "TypeError") {
@@ -1017,7 +1017,7 @@ function renderVerify() {
         currentUser = { ...data.user, isVerified: true, token: data.token };
         saveUser();
         pendingUser = null;
-        showToast("✅ Email verified! Welcome to Jikoni!");
+        showToast("✅ Email verified! Welcome to Mama Mboga!");
         
         // Load user data
         loadLoyalty();
@@ -1031,7 +1031,7 @@ function renderVerify() {
       })
       .catch((err) => {
         console.error("Verify error:", err);
-        let errorMsg = err.message || "Could not reach Jikoni servers";
+        let errorMsg = err.message || "Could not reach Mama Mboga servers";
         
         if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.name === "TypeError") {
           errorMsg = "❌ Cannot connect to server. Make sure the backend is running on port 4000.";
@@ -1062,7 +1062,7 @@ function renderForgotPassword() {
   header.className = "auth-header";
   header.innerHTML = `
     <div class="auth-title">Forgot your password?</div>
-    <div class="auth-subtitle">Enter the email you used for Jikoni and we’ll email you a reset code.</div>
+    <div class="auth-subtitle">Enter the email you used for Mama Mboga and we'll email you a reset code.</div>
   `;
 
   const form = document.createElement("form");
@@ -1353,7 +1353,7 @@ function renderOrderTracking() {
     "Almost there"
   ];
   const statusDescriptions = [
-    "We've received your order at the nearest Jikoni hub.",
+    "We've received your order at the nearest Mama Mboga hub.",
     "Your order is being picked & packed.",
     "Your rider has left the hub and is on the way.",
     "Your rider is near your place. Tafadhali keep your phone close.",
@@ -1476,7 +1476,7 @@ function renderOrderTracking() {
     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding-top: 20px; border-top: 1px solid #e5e0d5;">
       <div>
         <div style="font-size: 12px; color: #647067; margin-bottom: 6px;">From</div>
-        <div style="font-size: 16px; font-weight: 600; color: #0d3b32;">${nearestHub?.name || "Jikoni Hub"}</div>
+        <div style="font-size: 16px; font-weight: 600; color: #0d3b32;">${nearestHub?.name || "Mama Mboga Hub"}</div>
       </div>
       <div>
         <div style="font-size: 12px; color: #647067; margin-bottom: 6px;">To</div>
@@ -1647,7 +1647,7 @@ function renderOrderTracking() {
         .addTo(mapInstance)
         .bindPopup(`
           <div style="text-align: center; padding: 4px;">
-            <strong style="color: #f97316; font-size: 14px;">${nearestHub?.name || "Jikoni Hub"}</strong><br>
+            <strong style="color: #f97316; font-size: 14px;">${nearestHub?.name || "Mama Mboga Hub"}</strong><br>
             <span style="color: #647067; font-size: 12px;">Starting point</span>
           </div>
         `, { className: 'custom-popup' })
@@ -1801,7 +1801,7 @@ function renderOrderTracking() {
               </div>
               <div style="display: flex; justify-content: space-between;">
                 <span style="font-size: 12px; color: #647067;">From</span>
-                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">${nearestHub?.name || "Jikoni Hub"}</span>
+                <span style="font-size: 13px; font-weight: 600; color: #0d3b32;">${nearestHub?.name || "Mama Mboga Hub"}</span>
               </div>
             </div>
             ${riderDetails}
@@ -1819,7 +1819,7 @@ function renderOrderTracking() {
           "Almost there"
         ];
         const statusDescriptions = [
-          "We've received your order at the nearest Jikoni hub.",
+          "We've received your order at the nearest Mama Mboga hub.",
           "Your order is being picked & packed.",
           "Your rider has left the hub and is on the way.",
           "Your rider is near your place. Tafadhali keep your phone close.",
@@ -2038,7 +2038,7 @@ function renderHome() {
   const hubMain = hubStrip.querySelector(".hub-strip-main");
   hubMain.addEventListener("click", () => {
     if (!hubsData.length) {
-      showToast("Finding your nearest Jikoni hub…");
+      showToast("Finding your nearest Mama Mboga hub…");
       return;
     }
     const currentIndex = hubsData.findIndex((h) => h.id === currentHubId);
@@ -2055,7 +2055,7 @@ function renderHome() {
     deliveryMethod = walkInMode ? "pickup" : "delivery";
     saveHubSettings();
     const msg = walkInMode
-      ? `Walk-in mode on at ${hub?.name || "Jikoni Hub"}. We’ll prep your order while you queue.`
+      ? `Walk-in mode on at ${hub?.name || "Mama Mboga Hub"}. We'll prep your order while you queue.`
       : "Back to delivery mode from your nearest hub.";
     showToast(msg);
     render();
@@ -3066,7 +3066,7 @@ function renderOrderSuccess() {
       } pts · Balance ${lastOrderSummary.points ?? 0} pts.</div>
       <div style="margin-top:10px; font-size:13px; font-weight:600;">Live order tracking</div>
       <div style="margin-top:6px; font-size:12px; color:#647067;">
-        ${stage === 1 ? "We’ve received your order at the nearest Jikoni hub." :
+        ${stage === 1 ? "We've received your order at the nearest Mama Mboga hub." :
           stage === 2 ? "Your order is being picked & packed." :
           stage === 3 ? "Your rider has left the hub and is on the way." :
           "Your rider is near your place. Tafadhali keep your phone close."}
@@ -3086,7 +3086,7 @@ function renderOrderSuccess() {
       </div>
       <div style="margin-top:10px; border-radius:14px; background:#fdfaf2; padding:10px; display:flex; gap:10px; align-items:center; font-size:12px;">
         <div style="flex:1; min-width:0;">
-          <div style="font-weight:600; margin-bottom:4px;">Jikoni Hub → Your place</div>
+          <div style="font-weight:600; margin-bottom:4px;">Mama Mboga Hub → Your place</div>
           <div style="color:#647067;">This is a mock route for now, but feels like Glovo-style tracking.</div>
         </div>
         <div style="width:90px; height:70px; border-radius:10px; background:linear-gradient(135deg,#e5e7eb,#f97316); position:relative; overflow:hidden;">
@@ -3477,7 +3477,7 @@ function renderBotOverlay() {
   const header = document.createElement("div");
   header.className = "bot-header";
   header.innerHTML = `
-    <div class="bot-title">Jikoni Bot</div>
+    <div class="bot-title">Mama Mboga Bot</div>
     <button class="icon-btn" style="width:26px;height:26px;">✕</button>
   `;
   header.querySelector("button").addEventListener("click", () => {
@@ -3513,7 +3513,7 @@ function renderBotOverlay() {
   inputRow.className = "bot-input-row";
   const input = document.createElement("input");
   input.className = "bot-input";
-  input.placeholder = "Ask Jikoni…";
+  input.placeholder = "Ask Mama Mboga…";
   const send = document.createElement("button");
   send.className = "bot-send";
   send.textContent = "Send";
@@ -3862,12 +3862,12 @@ function renderInstallSheet() {
   sheet.className = "install-sheet";
   sheet.innerHTML = `
     <div class="install-sheet-inner">
-      <img src="/public/logo.png" alt="Jikoni" class="install-sheet-logo" />
+      <img src="/public/logo.png" alt="Mama Mboga" class="install-sheet-logo" />
       <div class="install-sheet-text">
         ${
           showIosInstructions
-            ? `Install <strong>Jikoni</strong> on your home screen for a full-screen app experience.<br/><br/><strong>On iPhone:</strong> Tap the share icon in Safari, then “Add to Home Screen”.`
-            : `Install <strong>Jikoni</strong> for faster access to your groceries and hampers.`
+            ? `Install <strong>Mama Mboga</strong> on your home screen for a full-screen app experience.<br/><br/><strong>On iPhone:</strong> Tap the share icon in Safari, then "Add to Home Screen".`
+            : `Install <strong>Mama Mboga</strong> for faster access to your groceries and hampers.`
         }
       </div>
       <div class="install-sheet-actions">
@@ -3892,7 +3892,7 @@ function renderInstallSheet() {
       deferredInstallPrompt = null;
       sheet.remove();
       if (choice && choice.outcome === "accepted") {
-        showToast("Jikoni installed. Asante!");
+        showToast("Mama Mboga installed. Asante!");
       }
     });
   }

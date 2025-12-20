@@ -1,6 +1,6 @@
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open("jikoni-shell-v1").then((cache) =>
+    caches.open("mama-mboga-shell-v1").then((cache) =>
       cache.addAll(["/", "/index.html", "/styles.css", "/main.js", "/manifest.webmanifest"])
     )
   );
@@ -11,7 +11,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys.map((key) => {
-          if (!key.startsWith("jikoni-shell-")) {
+          if (!key.startsWith("mama-mboga-shell-")) {
             return caches.delete(key);
           }
         })

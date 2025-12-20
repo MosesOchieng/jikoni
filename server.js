@@ -160,7 +160,7 @@ mailer.verify((error, success) => {
   }
 });
 
-// Helper function to create email template with Jikoni logo
+// Helper function to create email template with Mama Mboga logo
 function createEmailTemplate(title, content, gradientColor = "#f97316") {
   return `
     <!DOCTYPE html>
@@ -177,7 +177,7 @@ function createEmailTemplate(title, content, gradientColor = "#f97316") {
               <!-- Header with Logo -->
               <tr>
                 <td style="background: linear-gradient(135deg, ${gradientColor} 0%, ${gradientColor === "#f97316" ? "#ea580c" : gradientColor === "#22c55e" ? "#16a34a" : "#0284c7"} 100%); padding: 32px 40px; text-align: center;">
-                  <div style="font-size: 36px; font-weight: 700; color: #ffffff; margin-bottom: 8px;">🍅 Jikoni</div>
+                  <div style="font-size: 36px; font-weight: 700; color: #ffffff; margin-bottom: 8px;">🍅 Mama Mboga</div>
                   <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">${title}</h1>
                 </td>
               </tr>
@@ -190,7 +190,7 @@ function createEmailTemplate(title, content, gradientColor = "#f97316") {
               <!-- Footer -->
               <tr>
                 <td style="padding: 24px 40px; background-color: #f6f2e7; text-align: center; border-top: 1px solid #e5e0d5;">
-                  <p style="margin: 0; color: #647067; font-size: 14px;">Asante,<br><strong style="color: #0d3b32;">The Jikoni Team</strong></p>
+                  <p style="margin: 0; color: #647067; font-size: 14px;">Asante,<br><strong style="color: #0d3b32;">The Mama Mboga Team</strong></p>
                 </td>
               </tr>
             </table>
@@ -291,21 +291,21 @@ app.post("/api/auth/signup", (req, res) => {
       // Send verification email with Nodemailer
       const verificationContent = `
         <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Hi ${name},</p>
-        <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Welcome to Jikoni! Use this code to verify your email address:</p>
+        <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Welcome to Mama Mboga! Use this code to verify your email address:</p>
         <div style="background: linear-gradient(135deg, #f6f2e7 0%, #fdfaf2 100%); padding: 24px; border-radius: 12px; text-align: center; margin: 32px 0; border: 2px solid #f97316;">
           <div style="font-size: 36px; font-weight: 700; color: #0d3b32; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</div>
         </div>
         <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Enter this 6-digit code in the app to complete your registration.</p>
-        <p style="margin: 32px 0 0 0; color: #7a847f; font-size: 14px; line-height: 1.6;">If you didn't create a Jikoni account, you can safely ignore this email.</p>
+        <p style="margin: 32px 0 0 0; color: #7a847f; font-size: 14px; line-height: 1.6;">If you didn't create a Mama Mboga account, you can safely ignore this email.</p>
       `;
       
       mailer.sendMail(
         {
           from: "mosesochiengopiyo@gmail.com", // Must match authenticated Gmail user
           to: email,
-          subject: "Your Jikoni verification code",
+          subject: "Your Mama Mboga verification code",
           html: createEmailTemplate("Verify Your Email", verificationContent, "#f97316"),
-          text: `Hi ${name},\n\nWelcome to Jikoni! Use this code to verify your email address:\n\n${otp}\n\nEnter this 6-digit code in the app to complete your registration.\n\nIf you didn't create a Jikoni account, you can safely ignore this email.\n\nAsante,\nThe Jikoni Team`,
+          text: `Hi ${name},\n\nWelcome to Mama Mboga! Use this code to verify your email address:\n\n${otp}\n\nEnter this 6-digit code in the app to complete your registration.\n\nIf you didn't create a Mama Mboga account, you can safely ignore this email.\n\nAsante,\nThe Mama Mboga Team`,
         },
         (mailErr, info) => {
           if (mailErr) {
@@ -368,7 +368,7 @@ app.post("/api/auth/verify", (req, res) => {
         // Send a beautiful welcome email after successful verification
         const welcomeContent = `
           <p style="margin: 0 0 24px 0; color: #0d3b32; font-size: 18px; font-weight: 600;">Hi ${user.name},</p>
-          <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Great news! Your email has been verified and your Jikoni account is now active. 🎉</p>
+          <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Great news! Your email has been verified and your Mama Mboga account is now active. 🎉</p>
           
           <div style="background: #f6f2e7; padding: 24px; border-radius: 12px; margin: 32px 0;">
             <p style="margin: 0 0 16px 0; color: #0d3b32; font-size: 16px; font-weight: 600;">You can now:</p>
@@ -376,7 +376,7 @@ app.post("/api/auth/verify", (req, res) => {
               <li>🛒 Shop fresh groceries and essentials</li>
               <li>🔥 Build your streak and earn loyalty points</li>
               <li>🎁 Get surprise hampers and exclusive glow offers</li>
-              <li>🚚 Enjoy fast delivery from your nearest Jikoni hub</li>
+              <li>🚚 Enjoy fast delivery from your nearest Mama Mboga hub</li>
             </ul>
           </div>
 
@@ -386,7 +386,7 @@ app.post("/api/auth/verify", (req, res) => {
             </div>
           </div>
 
-          <p style="margin: 32px 0 0 0; color: #647067; font-size: 16px; line-height: 1.6;">We're excited to have you as part of the Jikoni family!</p>
+          <p style="margin: 32px 0 0 0; color: #647067; font-size: 16px; line-height: 1.6;">We're excited to have you as part of the Mama Mboga family!</p>
           <p style="margin: 16px 0 0 0; color: #7a847f; font-size: 14px; line-height: 1.6;">Questions? Reply to this email anytime.</p>
         `;
         
@@ -394,9 +394,9 @@ app.post("/api/auth/verify", (req, res) => {
           {
             from: "mosesochiengopiyo@gmail.com",
             to: email,
-            subject: "Welcome to Jikoni! 🍅",
-            html: createEmailTemplate("Karibu Jikoni! 🎉", welcomeContent, "#22c55e"),
-            text: `Hi ${user.name},\n\nKaribu Jikoni! Your email has been verified and your account is now active.\n\nYou can now:\n- Shop fresh groceries and essentials\n- Build your streak and earn loyalty points\n- Get surprise hampers and exclusive glow offers\n- Enjoy fast delivery from your nearest Jikoni hub\n\nWe're excited to have you as part of the Jikoni family!\n\nAsante,\nThe Jikoni Team`,
+            subject: "Welcome to Mama Mboga! 🍅",
+            html: createEmailTemplate("Karibu Mama Mboga! 🎉", welcomeContent, "#22c55e"),
+            text: `Hi ${user.name},\n\nKaribu Mama Mboga! Your email has been verified and your account is now active.\n\nYou can now:\n- Shop fresh groceries and essentials\n- Build your streak and earn loyalty points\n- Get surprise hampers and exclusive glow offers\n- Enjoy fast delivery from your nearest Mama Mboga hub\n\nWe're excited to have you as part of the Mama Mboga family!\n\nAsante,\nThe Mama Mboga Team`,
           },
           (mailErr) => {
             if (mailErr) {
@@ -447,7 +447,7 @@ app.post("/api/auth/forgot", (req, res) => {
 
         const resetContent = `
           <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Hi ${user.name},</p>
-          <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">You requested to reset your Jikoni password. Use this code to verify your identity:</p>
+          <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">You requested to reset your Mama Mboga password. Use this code to verify your identity:</p>
           <div style="background: linear-gradient(135deg, #f6f2e7 0%, #fdfaf2 100%); padding: 24px; border-radius: 12px; text-align: center; margin: 32px 0; border: 2px solid #f97316;">
             <div style="font-size: 36px; font-weight: 700; color: #0d3b32; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</div>
           </div>
@@ -461,9 +461,9 @@ app.post("/api/auth/forgot", (req, res) => {
           {
             from: "mosesochiengopiyo@gmail.com",
             to: email,
-            subject: "Reset your Jikoni password",
+            subject: "Reset your Mama Mboga password",
             html: createEmailTemplate("🔐 Password Reset", resetContent, "#f97316"),
-            text: `Hi ${user.name},\n\nYou requested to reset your Jikoni password. Use this code to verify your identity:\n\n${otp}\n\nEnter this 6-digit code in the app to reset your password.\n\nIf you didn't request this password reset, please ignore this email. Your account remains secure.\n\nAsante,\nThe Jikoni Team`,
+            text: `Hi ${user.name},\n\nYou requested to reset your Mama Mboga password. Use this code to verify your identity:\n\n${otp}\n\nEnter this 6-digit code in the app to reset your password.\n\nIf you didn't request this password reset, please ignore this email. Your account remains secure.\n\nAsante,\nThe Mama Mboga Team`,
           },
           (mailErr) => {
             if (mailErr) {
@@ -514,7 +514,7 @@ app.post("/api/auth/reset-password", (req, res) => {
         // Send confirmation email
         const resetConfirmContent = `
           <p style="margin: 0 0 24px 0; color: #0d3b32; font-size: 18px; font-weight: 600;">Hi ${user.name},</p>
-          <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Your Jikoni password has been successfully reset.</p>
+          <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Your Mama Mboga password has been successfully reset.</p>
           <div style="background: #f0fdf4; padding: 16px; border-radius: 8px; border-left: 4px solid #22c55e; margin: 24px 0;">
             <p style="margin: 0; color: #166534; font-size: 14px; line-height: 1.6;">🔒 Your account is now secure with your new password. You can log in using your new password.</p>
           </div>
@@ -525,9 +525,9 @@ app.post("/api/auth/reset-password", (req, res) => {
           {
             from: "mosesochiengopiyo@gmail.com",
             to: email,
-            subject: "Your Jikoni password has been reset",
+            subject: "Your Mama Mboga password has been reset",
             html: createEmailTemplate("✅ Password Reset Successful", resetConfirmContent, "#22c55e"),
-            text: `Hi ${user.name},\n\nYour Jikoni password has been successfully reset.\n\nYour account is now secure with your new password. You can log in using your new password.\n\nIf you didn't make this change, please contact us immediately.\n\nAsante,\nThe Jikoni Team`,
+            text: `Hi ${user.name},\n\nYour Mama Mboga password has been successfully reset.\n\nYour account is now secure with your new password. You can log in using your new password.\n\nIf you didn't make this change, please contact us immediately.\n\nAsante,\nThe Mama Mboga Team`,
           },
           (mailErr) => {
             if (mailErr) {
@@ -759,7 +759,7 @@ app.post("/api/orders", authRequired, (req, res) => {
                         to: email,
                         subject: `Order Confirmed - #${id}`,
                         html: createEmailTemplate("Order Confirmed! 🎉", orderContent, "#22c55e"),
-                        text: `Hi ${userName},\n\nYour order #${id} has been confirmed. Total: KSh ${total}\n\nYou earned ${basePoints + bonus} points from this order!\n\nTrack your order in the app.\n\nAsante,\nThe Jikoni Team`,
+                        text: `Hi ${userName},\n\nYour order #${id} has been confirmed. Total: KSh ${total}\n\nYou earned ${basePoints + bonus} points from this order!\n\nTrack your order in the app.\n\nAsante,\nThe Mama Mboga Team`,
                       },
                       (mailErr) => {
                         if (mailErr) {
@@ -874,7 +874,7 @@ app.post("/api/orders/:orderId/delivered", authRequired, (req, res) => {
                 <p style="margin: 0; color: #166534; font-size: 14px; line-height: 1.6;">✅ Your order has been successfully delivered. We hope you enjoy your groceries!</p>
               </div>
               
-              <p style="margin: 24px 0 0 0; color: #647067; font-size: 16px; line-height: 1.6;">Thank you for choosing Jikoni. We'd love to hear your feedback!</p>
+              <p style="margin: 24px 0 0 0; color: #647067; font-size: 16px; line-height: 1.6;">Thank you for choosing Mama Mboga. We'd love to hear your feedback!</p>
             `;
             
             // Send delivery email
@@ -884,7 +884,7 @@ app.post("/api/orders/:orderId/delivered", authRequired, (req, res) => {
                 to: email,
                 subject: `Order Delivered - #${orderId} 🎉`,
                 html: createEmailTemplate("Order Delivered! 🎉", deliveryContent, "#22c55e"),
-                text: `Hi ${user.name},\n\nGreat news! Your order #${orderId} has been delivered!\n\nItems: ${itemsList}\nTotal: KSh ${order.total}\n\nThank you for choosing Jikoni!\n\nAsante,\nThe Jikoni Team`,
+                text: `Hi ${user.name},\n\nGreat news! Your order #${orderId} has been delivered!\n\nItems: ${itemsList}\nTotal: KSh ${order.total}\n\nThank you for choosing Mama Mboga!\n\nAsante,\nThe Mama Mboga Team`,
               },
               (mailErr) => {
                 if (mailErr) {
@@ -942,7 +942,7 @@ app.get(/^(?!\/api).*/, (req, res) => {
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => {
-    console.log(`Jikoni API + frontend running on http://localhost:${PORT}`);
+    console.log(`Mama Mboga API + frontend running on http://localhost:${PORT}`);
   });
 }
 

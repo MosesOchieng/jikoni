@@ -39,12 +39,29 @@ body {
 }
 
 .loader-spinner {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
-  border: 3px solid rgba(15, 23, 42, 0.15);
-  border-top-color: #f97316;
-  animation: spin 0.8s linear infinite;
+  border: 3px solid rgba(34, 197, 94, 0.2);
+  border-top-color: #22c55e;
+  border-right-color: #16a34a;
+  animation: spin 0.7s linear infinite;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+}
+
+.loader-logo {
+  animation: logoPulse 2s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
 }
 
 .app-shell {
@@ -168,16 +185,16 @@ body {
 }
 
 .primary-btn {
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: #ea580c;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
 }
 
 .primary-btn:active:not(:disabled) {
@@ -344,10 +361,16 @@ body {
   padding: 8px 12px;
   border-radius: 999px;
   border: none;
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
   font-size: 13px;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hero-glow-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
 }
 
 .auth-screen {
@@ -409,8 +432,8 @@ body {
 
 .field-input:focus {
   outline: none;
-  border-color: #f97316;
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  border-color: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
   background: #fff;
 }
 
@@ -479,13 +502,15 @@ body {
 }
 
 .processing-spinner {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
-  border: 3px solid rgba(15, 23, 42, 0.15);
-  border-top-color: #f97316;
+  border: 3px solid rgba(34, 197, 94, 0.2);
+  border-top-color: #22c55e;
+  border-right-color: #16a34a;
   margin: 0 auto;
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.7s linear infinite;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
 }
 
 /* Responsive tweaks for small screens */
@@ -582,9 +607,15 @@ body {
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 11px;
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hub-strip-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .cart-chip {
@@ -640,8 +671,8 @@ body {
 }
 
 .search-bar:focus-within {
-  border-color: #f97316;
-  box-shadow: 0 2px 12px rgba(249, 115, 22, 0.15);
+  border-color: #22c55e;
+  box-shadow: 0 2px 12px rgba(34, 197, 94, 0.15);
 }
 
 .search-input {
@@ -801,8 +832,14 @@ body {
 }
 
 .combo-btn.primary {
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
+  transition: all 0.2s ease;
+}
+
+.combo-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .combo-btn.ghost {
@@ -927,9 +964,15 @@ body {
   border-radius: 999px;
   padding: 8px 10px;
   font-size: 13px;
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bot-send:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .install-sheet {
@@ -977,9 +1020,15 @@ body {
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 12px;
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.install-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .install-dismiss {
@@ -1040,17 +1089,17 @@ body {
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 600;
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.3);
+  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.3);
 }
 
 .product-add-btn:hover {
-  background: #ea580c;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
   transform: scale(1.05);
-  box-shadow: 0 3px 8px rgba(249, 115, 22, 0.4);
+  box-shadow: 0 3px 8px rgba(34, 197, 94, 0.4);
 }
 
 .product-add-btn:active {
@@ -1304,7 +1353,7 @@ body {
   max-height: 200px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #f97316 #f6f2e7;
+  scrollbar-color: #22c55e #f6f2e7;
 }
 
 #address-suggestions::-webkit-scrollbar {
@@ -1317,7 +1366,7 @@ body {
 }
 
 #address-suggestions::-webkit-scrollbar-thumb {
-  background: #f97316;
+  background: #22c55e;
   border-radius: 10px;
 }
 
@@ -1487,8 +1536,14 @@ body {
 }
 
 .glow-btn.accept {
-  background: #f97316;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fdfaf2;
+  transition: all 0.2s ease;
+}
+
+.glow-btn.accept:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .glow-btn.reject {
