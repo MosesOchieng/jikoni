@@ -810,7 +810,6 @@ function renderLogin() {
 
   // Social auth section (UI only for now)
   const social = document.createElement("div");
-  const social = document.createElement("div");
   social.className = "auth-form";
   social.style.marginTop = "8px";
   social.innerHTML = `
