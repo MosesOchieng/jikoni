@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf dist && mkdir -p dist && cp index.html dist/index.html && cp main.js dist/main.js && cp styles.css dist/styles.css && cp sw.js dist/sw.js && cp manifest.webmanifest dist/manifest.webmanifest && cp -r public dist/public && mkdir -p dist/icons && cp public/icons/logo-192.png dist/icons/logo-192.png && cp public/icons/logo-512.png dist/icons/logo-512.png && cp public/logo.png dist/logo.png && cp public/logo.png dist/apple-touch-icon.png",
+    "build": "rm -rf dist && mkdir -p dist && cp index.html dist/index.html && cp main.js dist/main.js && cp styles.css dist/styles.css && cp sw.js dist/sw.js && cp manifest.webmanifest dist/manifest.webmanifest && cp -r public dist/public && mkdir -p dist/icons && cp public/icons/app.jpeg dist/icons/app.jpeg && cp public/logo.png dist/logo.png",
     "start": "node server.js"
   },
   "keywords": [],
