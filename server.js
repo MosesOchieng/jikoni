@@ -365,53 +365,73 @@ app.post("/api/auth/verify", (req, res) => {
           return res.status(500).json({ message: "Verification failed" });
         }
 
-        // Send a beautiful welcome email after successful verification
-        const welcomeContent = `
-          <p style="margin: 0 0 24px 0; color: #0d3b32; font-size: 18px; font-weight: 600;">Hi ${user.name},</p>
-          <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Great news! Your email has been verified and your Mama Mboga account is now active. 🎉</p>
-          
-          <div style="background: #f6f2e7; padding: 24px; border-radius: 12px; margin: 32px 0;">
-            <p style="margin: 0 0 16px 0; color: #0d3b32; font-size: 16px; font-weight: 600;">You can now:</p>
-            <ul style="margin: 0; padding-left: 20px; color: #647067; font-size: 16px; line-height: 2;">
-              <li>🛒 Shop fresh groceries and essentials</li>
-              <li>🔥 Build your streak and earn loyalty points</li>
-              <li>🎁 Get surprise hampers and exclusive glow offers</li>
-              <li>🚚 Enjoy fast delivery from your nearest Mama Mboga hub</li>
-            </ul>
-          </div>
-
-          <div style="text-align: center; margin: 32px 0;">
-            <div style="display: inline-block; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 14px 32px; border-radius: 8px;">
-              <p style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 600;">Start Shopping Now →</p>
-            </div>
-          </div>
-
-          <p style="margin: 32px 0 0 0; color: #647067; font-size: 16px; line-height: 1.6;">We're excited to have you as part of the Mama Mboga family!</p>
-          <p style="margin: 16px 0 0 0; color: #7a847f; font-size: 14px; line-height: 1.6;">Questions? Reply to this email anytime.</p>
-        `;
-        
-        mailer.sendMail(
-          {
-            from: "mosesochiengopiyo@gmail.com",
-            to: email,
-            subject: "Welcome to Mama Mboga! 🍅",
-            html: createEmailTemplate("Karibu Mama Mboga! 🎉", welcomeContent, "#22c55e"),
-            text: `Hi ${user.name},\n\nKaribu Mama Mboga! Your email has been verified and your account is now active.\n\nYou can now:\n- Shop fresh groceries and essentials\n- Build your streak and earn loyalty points\n- Get surprise hampers and exclusive glow offers\n- Enjoy fast delivery from your nearest Mama Mboga hub\n\nWe're excited to have you as part of the Mama Mboga family!\n\nAsante,\nThe Mama Mboga Team`,
-          },
-          (mailErr) => {
-            if (mailErr) {
-              console.error("Welcome mail error", mailErr);
-            } else {
-              console.log("✅ Welcome email sent to", email);
-            }
+        // Fetch updated user to ensure we have the latest isVerified status
+        db.get("SELECT * FROM users WHERE email = ?", [email], (fetchErr, updatedUser) => {
+          if (fetchErr) {
+            console.error("Error fetching updated user:", fetchErr);
+            // Fallback to using the original user object with isVerified set to true
+            const token = signToken(user);
+            res.json({
+              message: "Verified",
+              user: { id: user.id, name: user.name, email: user.email, isVerified: true },
+              token,
+            });
+            return;
           }
-        );
 
-        const token = signToken(user);
-        res.json({
-          message: "Verified",
-          user: { id: user.id, name: user.name, email: user.email },
-          token,
+          // Send a beautiful welcome email after successful verification
+          const welcomeContent = `
+            <p style="margin: 0 0 24px 0; color: #0d3b32; font-size: 18px; font-weight: 600;">Hi ${updatedUser.name || user.name},</p>
+            <p style="margin: 0 0 24px 0; color: #647067; font-size: 16px; line-height: 1.6;">Great news! Your email has been verified and your Mama Mboga account is now active. 🎉</p>
+            
+            <div style="background: #f6f2e7; padding: 24px; border-radius: 12px; margin: 32px 0;">
+              <p style="margin: 0 0 16px 0; color: #0d3b32; font-size: 16px; font-weight: 600;">You can now:</p>
+              <ul style="margin: 0; padding-left: 20px; color: #647067; font-size: 16px; line-height: 2;">
+                <li>🛒 Shop fresh groceries and essentials</li>
+                <li>🔥 Build your streak and earn loyalty points</li>
+                <li>🎁 Get surprise hampers and exclusive glow offers</li>
+                <li>🚚 Enjoy fast delivery from your nearest Mama Mboga hub</li>
+              </ul>
+            </div>
+
+            <div style="text-align: center; margin: 32px 0;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 14px 32px; border-radius: 8px;">
+                <p style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 600;">Start Shopping Now →</p>
+              </div>
+            </div>
+
+            <p style="margin: 32px 0 0 0; color: #647067; font-size: 16px; line-height: 1.6;">We're excited to have you as part of the Mama Mboga family!</p>
+            <p style="margin: 16px 0 0 0; color: #7a847f; font-size: 14px; line-height: 1.6;">Questions? Reply to this email anytime.</p>
+          `;
+          
+          mailer.sendMail(
+            {
+              from: "mosesochiengopiyo@gmail.com",
+              to: email,
+              subject: "Welcome to Mama Mboga! 🍅",
+              html: createEmailTemplate("Karibu Mama Mboga! 🎉", welcomeContent, "#22c55e"),
+              text: `Hi ${updatedUser.name || user.name},\n\nKaribu Mama Mboga! Your email has been verified and your account is now active.\n\nYou can now:\n- Shop fresh groceries and essentials\n- Build your streak and earn loyalty points\n- Get surprise hampers and exclusive glow offers\n- Enjoy fast delivery from your nearest Mama Mboga hub\n\nWe're excited to have you as part of the Mama Mboga family!\n\nAsante,\nThe Mama Mboga Team`,
+            },
+            (mailErr) => {
+              if (mailErr) {
+                console.error("Welcome mail error", mailErr);
+              } else {
+                console.log("✅ Welcome email sent to", email);
+              }
+            }
+          );
+
+          const token = signToken(updatedUser || user);
+          res.json({
+            message: "Verified",
+            user: { 
+              id: updatedUser.id || user.id, 
+              name: updatedUser.name || user.name, 
+              email: updatedUser.email || user.email, 
+              isVerified: true 
+            },
+            token,
+          });
         });
       }
     );
@@ -564,7 +584,7 @@ app.post("/api/auth/login", (req, res) => {
     }
     const token = signToken(user);
     res.json({
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, isVerified: user.isVerified ? true : false },
       token,
     });
   });
