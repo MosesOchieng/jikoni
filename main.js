@@ -31,6 +31,7 @@ const SCREENS = {
   SEARCH: "search",
   ORDER_SUCCESS: "orderSuccess",
   ORDER_HISTORY: "orderHistory",
+  DELIVERY_CONFIRMED: "deliveryConfirmed",
 };
 
 let currentScreen = SCREENS.LOADER;
@@ -56,6 +57,7 @@ let deferredInstallPrompt = null;
 let currentCategory = null; // For filtering products by category
 let deliveryAddress = "";
 let orderTrackingInterval = null;
+let pushSubscription = null;
 
 function authHeaders() {
   if (currentUser?.token) {
@@ -116,9 +118,81 @@ function loadState() {
     if (savedPrefs) notificationPrefs = JSON.parse(savedPrefs);
     const savedAddress = localStorage.getItem("jikoniAddress");
     if (savedAddress) deliveryAddress = savedAddress;
+    
+    // Initialize push notifications
+    if (currentUser && currentUser.token) {
+      initializePushNotifications();
+    }
   } catch {
     // ignore
   }
+}
+
+// Initialize push notifications
+function initializePushNotifications() {
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+    navigator.serviceWorker.ready.then(registration => {
+      registration.pushManager.getSubscription().then(subscription => {
+        if (subscription && currentUser && currentUser.token) {
+          // Subscribe to backend
+          fetch(`${API_BASE}/api/push/subscribe`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+              endpoint: subscription.endpoint,
+              keys: {
+                p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+                auth: arrayBufferToBase64(subscription.getKey('auth'))
+              }
+            })
+          }).catch(err => console.error('Failed to register push subscription:', err));
+        }
+      });
+    });
+  }
+}
+
+// Request push notification permission
+function requestPushPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+          // Note: In production, you need a real VAPID key
+          // For now, we'll use a placeholder - you'll need to generate one
+          registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: null // Will need real VAPID key
+          }).then(subscription => {
+            pushSubscription = subscription;
+            if (currentUser && currentUser.token) {
+              fetch(`${API_BASE}/api/push/subscribe`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                  endpoint: subscription.endpoint,
+                  keys: {
+                    p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+                    auth: arrayBufferToBase64(subscription.getKey('auth'))
+                  }
+                })
+              }).catch(err => console.error('Failed to register push subscription:', err));
+            }
+          }).catch(err => console.error('Failed to subscribe to push:', err));
+        });
+      }
+    });
+  }
+}
+
+// Helper functions for push notifications
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 function loadCartFromBackend() {
@@ -385,6 +459,8 @@ function render() {
     }
   } else if (currentScreen === SCREENS.ORDER_HISTORY) {
     shell.appendChild(renderOrderHistory());
+  } else if (currentScreen === SCREENS.DELIVERY_CONFIRMED) {
+    shell.appendChild(renderDeliveryConfirmed());
   } else {
     shell.appendChild(renderHome());
   }
@@ -1365,7 +1441,7 @@ function renderOrderTracking() {
     : new Date();
   const now = new Date();
   const minutes = Math.max(
-    0,
+    5, // Stop at 5 minutes minimum
     Math.floor((now.getTime() - placedAt.getTime()) / 60000)
   );
   let stage = 0;
@@ -1539,7 +1615,7 @@ function renderOrderTracking() {
       </div>
       <div>
         <div style="font-size: 12px; color: #647067; margin-bottom: 6px;">ETA</div>
-        <div style="font-size: 16px; font-weight: 600; color: #f97316;">~${Math.max(5, 20 - minutes)} min</div>
+        <div style="font-size: 16px; font-weight: 600; color: #f97316;">~${Math.max(5, 20 - Math.max(5, minutes))} min</div>
       </div>
     </div>
   `;
@@ -1640,52 +1716,52 @@ function renderOrderTracking() {
         html: `
           <div style="
             position: relative;
-            width: 60px;
-            height: 60px;
+            width: 70px;
+            height: 70px;
             display: flex;
             align-items: center;
             justify-content: center;
           ">
             <div style="
               background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-              width: 56px;
-              height: 56px;
+              width: 64px;
+              height: 64px;
               border-radius: 50%;
               border: 4px solid #ffffff;
               box-shadow: 0 4px 16px rgba(249, 115, 22, 0.5), 0 0 0 6px rgba(249, 115, 22, 0.15);
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 32px;
+              font-size: 36px;
               animation: pulse 2s ease-in-out infinite;
               position: relative;
               z-index: 1000;
             ">
-              🛵
+              🏍️
             </div>
             <div style="
               position: absolute;
-              top: -8px;
+              top: -6px;
               left: 50%;
               transform: translateX(-50%);
               background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-              width: 28px;
-              height: 28px;
+              width: 32px;
+              height: 32px;
               border-radius: 50%;
               border: 3px solid #ffffff;
               box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 16px;
+              font-size: 18px;
               z-index: 1001;
             ">
-              👤
+              👨‍🏍️
             </div>
           </div>
         `,
-        iconSize: [60, 60],
-        iconAnchor: [30, 30]
+        iconSize: [70, 70],
+        iconAnchor: [35, 35]
       });
 
       // Calculate rider position based on stage - always show rider
@@ -1820,8 +1896,27 @@ function renderOrderTracking() {
 
       // Get road route from hub to delivery
       let roadRoute = null;
+      let routeDistance = 0; // Total route distance for progress calculation
       getRoadRoute(hubCoords, deliveryCoords).then(route => {
         roadRoute = route;
+        // Calculate total route distance
+        if (route.length > 1) {
+          routeDistance = 0;
+          for (let i = 1; i < route.length; i++) {
+            const lat1 = route[i-1][0];
+            const lon1 = route[i-1][1];
+            const lat2 = route[i][0];
+            const lon2 = route[i][1];
+            const R = 6371; // Earth's radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            routeDistance += R * c;
+          }
+        }
         // Draw route
         if (route.length > 2) {
           // Shadow route
@@ -1934,6 +2029,52 @@ function renderOrderTracking() {
         const iconDiv = statusOverlay.querySelector('div[style*="width: 56px"][style*="height: 56px"][style*="border-radius: 50%"]');
         if (iconDiv) iconDiv.innerHTML = currentStage >= 4 ? "✅" : "🛵";
         
+        // Add delivery confirmation button when stage 4 is reached
+        if (currentStage >= 4) {
+          let confirmBtn = statusOverlay.querySelector('.delivery-confirm-btn');
+          if (!confirmBtn) {
+            confirmBtn = document.createElement('button');
+            confirmBtn.className = 'delivery-confirm-btn';
+            confirmBtn.style.cssText = `
+              width: 100%;
+              margin-top: 16px;
+              padding: 14px;
+              background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+              color: white;
+              border: none;
+              border-radius: 12px;
+              font-size: 16px;
+              font-weight: 600;
+              cursor: pointer;
+              box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+              transition: transform 0.2s;
+            `;
+            confirmBtn.textContent = 'Confirm Delivery';
+            confirmBtn.onclick = () => {
+              if (currentUser && currentUser.token && lastOrderSummary) {
+                fetch(`${API_BASE}/api/orders/${lastOrderSummary.id}/delivered`, {
+                  method: 'POST',
+                  headers: authHeaders()
+                })
+                .then(res => res.json())
+                .then(data => {
+                  showToast('✅ Delivery confirmed! Thank you for shopping with Mama Mboga!');
+                  currentScreen = SCREENS.DELIVERY_CONFIRMED;
+                  render();
+                })
+                .catch(err => {
+                  console.error('Failed to confirm delivery:', err);
+                  showToast('Failed to confirm delivery. Please try again.');
+                });
+              }
+            };
+            statusOverlay.appendChild(confirmBtn);
+          }
+        } else {
+          const confirmBtn = statusOverlay.querySelector('.delivery-confirm-btn');
+          if (confirmBtn) confirmBtn.remove();
+        }
+        
         // Update status labels (the spans in the progress section)
         const statusLabels = statusOverlay.querySelectorAll('span[style*="font-weight"]');
         statusLabels.forEach((label, idx) => {
@@ -1945,21 +2086,155 @@ function renderOrderTracking() {
         });
       };
 
-      // Auto-update tracking every 5 seconds
+      // Connect to Server-Sent Events for real-time updates
+      let eventSource = null;
+      if (currentUser && currentUser.token && lastOrderSummary) {
+        // EventSource doesn't support custom headers, so pass token as query param
+        eventSource = new EventSource(`${API_BASE}/api/orders/${lastOrderSummary.id}/stream?token=${encodeURIComponent(currentUser.token)}`);
+        
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'status' || data.type === 'location') {
+              // Update order status
+              let newStage = 0;
+              const statusMap = {
+                'pending': 0,
+                'confirmed': 0,
+                'preparing': 1,
+                'dispatched': 2,
+                'on_the_way': 3,
+                'arrived': 4,
+                'delivered': 4
+              };
+              newStage = statusMap[data.status] || 0;
+              
+              // Calculate minutes from placed time
+              const statusTime = data.timestamp ? new Date(data.timestamp) : new Date();
+              const newMinutes = Math.max(5, Math.floor((statusTime.getTime() - placedAt.getTime()) / 60000));
+              
+              // Update status overlay
+              updateStatusOverlay(newStage, newMinutes);
+              
+              // Update rider position if location provided
+              if (data.riderLat !== undefined && data.riderLng !== undefined && mapInstance) {
+                let newRiderLat = data.riderLat;
+                let newRiderLng = data.riderLng;
+                
+                // Ensure rider marker exists and update position
+                if (!riderMarker) {
+                  riderMarker = L.marker([newRiderLat, newRiderLng], { 
+                    icon: riderIcon, 
+                    zIndexOffset: 1000 
+                  }).addTo(mapInstance)
+                    .bindPopup(createRiderPopupContent(newStage, newMinutes), { 
+                      className: 'custom-popup',
+                      closeButton: true,
+                      autoClose: false,
+                      closeOnClick: false,
+                      autoPan: true,
+                      maxWidth: 280
+                    });
+                  riderMarker.on('click', function() {
+                    this.openPopup();
+                  });
+                } else {
+                  const wasOpen = riderMarker.isPopupOpen();
+                  riderMarker.setLatLng([newRiderLat, newRiderLng]);
+                  riderMarker.setPopupContent(createRiderPopupContent(newStage, newMinutes));
+                  if (wasOpen) {
+                    riderMarker.openPopup();
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error parsing SSE data:', err);
+          }
+        };
+        
+        eventSource.onerror = (err) => {
+          console.error('SSE connection error:', err);
+          // Fallback to polling if SSE fails
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+        };
+      }
+      
+      // Fallback: Auto-update tracking every 5 seconds if SSE not available
       if (orderTrackingInterval) clearInterval(orderTrackingInterval);
       orderTrackingInterval = setInterval(() => {
-        if (lastOrderSummary && mapInstance) {
-          const newMinutes = Math.max(0, Math.floor((new Date().getTime() - placedAt.getTime()) / 60000));
-          let newStage = 0;
-          if (newMinutes >= 0) newStage = 1;
-          if (newMinutes >= 3) newStage = 2;
-          if (newMinutes >= 8) newStage = 3;
-          if (newMinutes >= 15) newStage = 4;
-
-          // Update status overlay
-          updateStatusOverlay(newStage, newMinutes);
+        if (lastOrderSummary && mapInstance && !eventSource) {
+          // Fetch current status from API
+          fetch(`${API_BASE}/api/orders/${lastOrderSummary.id}/status`, {
+            headers: authHeaders()
+          })
+          .then(res => res.json())
+          .then(data => {
+            let newStage = 0;
+            const statusMap = {
+              'pending': 0,
+              'confirmed': 0,
+              'preparing': 1,
+              'dispatched': 2,
+              'on_the_way': 3,
+              'arrived': 4,
+              'delivered': 4
+            };
+            newStage = statusMap[data.status] || 0;
+            
+            const statusTime = data.lastUpdate ? new Date(data.lastUpdate) : new Date();
+            const newMinutes = Math.max(5, Math.floor((statusTime.getTime() - placedAt.getTime()) / 60000));
+            
+            updateStatusOverlay(newStage, newMinutes);
+            
+            // Update rider position if available
+            if (data.riderLat !== undefined && data.riderLng !== undefined) {
+              if (!riderMarker) {
+                riderMarker = L.marker([data.riderLat, data.riderLng], { 
+                  icon: riderIcon, 
+                  zIndexOffset: 1000 
+                }).addTo(mapInstance)
+                  .bindPopup(createRiderPopupContent(newStage, newMinutes), { 
+                    className: 'custom-popup',
+                    closeButton: true,
+                    autoClose: false,
+                    closeOnClick: false,
+                    autoPan: true,
+                    maxWidth: 280
+                  });
+                riderMarker.on('click', function() {
+                  this.openPopup();
+                });
+              } else {
+                const wasOpen = riderMarker.isPopupOpen();
+                riderMarker.setLatLng([data.riderLat, data.riderLng]);
+                riderMarker.setPopupContent(createRiderPopupContent(newStage, newMinutes));
+                if (wasOpen) {
+                  riderMarker.openPopup();
+                }
+              }
+            }
+          })
+          .catch(err => {
+            console.error('Failed to fetch order status:', err);
+            // Fallback to time-based simulation
+            const newMinutes = Math.max(5, Math.floor((new Date().getTime() - placedAt.getTime()) / 60000));
+            let newStage = 0;
+            if (newMinutes >= 0) newStage = 1;
+            if (newMinutes >= 3) newStage = 2;
+            if (newMinutes >= 8) newStage = 3;
+            if (newMinutes >= 15) newStage = 4;
+            updateStatusOverlay(newStage, newMinutes);
+          });
+        }
+      }, 5000);
 
           // Always update rider position - ensure it's always visible
+          // Use road route if available, otherwise fallback to straight line
           let newRiderLat, newRiderLng;
           if (newStage <= 1) {
             newRiderLat = hubCoords[0];
@@ -1969,8 +2244,20 @@ function renderOrderTracking() {
             newRiderLng = deliveryCoords[1];
           } else {
             const progress = Math.min(1, Math.max(0, (newMinutes - 3) / 12));
-            newRiderLat = hubCoords[0] + (deliveryCoords[0] - hubCoords[0]) * progress;
-            newRiderLng = hubCoords[1] + (deliveryCoords[1] - hubCoords[1]) * progress;
+            
+            // If we have a road route, use it to find the position along the route
+            if (roadRoute && roadRoute.length > 1) {
+              const routeIndex = Math.floor(progress * (roadRoute.length - 1));
+              const nextIndex = Math.min(routeIndex + 1, roadRoute.length - 1);
+              const segmentProgress = (progress * (roadRoute.length - 1)) - routeIndex;
+              
+              newRiderLat = roadRoute[routeIndex][0] + (roadRoute[nextIndex][0] - roadRoute[routeIndex][0]) * segmentProgress;
+              newRiderLng = roadRoute[routeIndex][1] + (roadRoute[nextIndex][1] - roadRoute[routeIndex][1]) * segmentProgress;
+            } else {
+              // Fallback to straight line interpolation
+              newRiderLat = hubCoords[0] + (deliveryCoords[0] - hubCoords[0]) * progress;
+              newRiderLng = hubCoords[1] + (deliveryCoords[1] - hubCoords[1]) * progress;
+            }
           }
 
           // Ensure rider marker exists and update position
@@ -2004,18 +2291,21 @@ function renderOrderTracking() {
             }
           }
           
-          // Update route line
+          // Update route line - use road route if available
           if (routeLine) {
             mapInstance.removeLayer(routeLine);
           }
-          const newRoute = [
-            hubCoords,
-            [newRiderLat, newRiderLng],
-            deliveryCoords
-          ];
+          
+          // If we have a road route, use it; otherwise use straight line
+          let routeToDraw;
+          if (roadRoute && roadRoute.length > 1) {
+            routeToDraw = roadRoute;
+          } else {
+            routeToDraw = [hubCoords, deliveryCoords];
+          }
           
           // Add shadow line first
-          L.polyline(newRoute, {
+          L.polyline(routeToDraw, {
             color: '#ffffff',
             weight: 8,
             opacity: 0.3,
@@ -2025,7 +2315,7 @@ function renderOrderTracking() {
           }).addTo(mapInstance).bringToBack();
           
           // Add main route line
-          routeLine = L.polyline(newRoute, {
+          routeLine = L.polyline(routeToDraw, {
             color: '#f97316',
             weight: 5,
             opacity: 0.8,
@@ -2420,6 +2710,20 @@ function renderCart() {
     });
   });
 
+  // Weekly order checkbox
+  const weeklyOrderWrap = document.createElement("div");
+  weeklyOrderWrap.style.cssText = "padding: 16px; background: #f6f2e7; border-radius: 12px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;";
+  const weeklyCheckbox = document.createElement("input");
+  weeklyCheckbox.type = "checkbox";
+  weeklyCheckbox.id = "weekly-order-checkbox";
+  weeklyCheckbox.style.cssText = "width: 20px; height: 20px; cursor: pointer;";
+  const weeklyLabel = document.createElement("label");
+  weeklyLabel.htmlFor = "weekly-order-checkbox";
+  weeklyLabel.style.cssText = "flex: 1; font-size: 14px; color: #0d3b32; cursor: pointer;";
+  weeklyLabel.innerHTML = "📅 Make this a weekly order (automatically repeat every week)";
+  weeklyOrderWrap.appendChild(weeklyCheckbox);
+  weeklyOrderWrap.appendChild(weeklyLabel);
+
   const payBtn = document.createElement("button");
   payBtn.className = "primary-btn";
   payBtn.textContent = `Confirm & pay · KSh ${total}`;
@@ -2437,6 +2741,7 @@ function renderCart() {
 
     const startPayment = (method) => {
       paymentMethod = method;
+      const isWeekly = weeklyCheckbox.checked;
       const payload = {
         email: currentUser.email,
         items: cart.map((item) => ({
@@ -2447,6 +2752,7 @@ function renderCart() {
         paymentMethod,
         address: deliveryAddress || null,
         totals: { subtotal, discountTotal, deliveryFee, total },
+        isWeekly: isWeekly,
       };
 
       // Centered loader overlay while processing payment
@@ -2675,6 +2981,7 @@ function renderCart() {
     wrap.appendChild(glow);
     wrap.appendChild(addressBlock);
     wrap.appendChild(deliveryBlock);
+    wrap.appendChild(weeklyOrderWrap);
     wrap.appendChild(payBtn);
   }
   return wrap;
@@ -3224,6 +3531,150 @@ function renderOrderSuccess() {
   actions.appendChild(homeBtn);
   actions.appendChild(historyBtn);
   actions.appendChild(loyaltyBtn);
+
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  wrap.appendChild(actions);
+  return wrap;
+}
+
+function renderDeliveryConfirmed() {
+  const wrap = document.createElement("div");
+  wrap.className = "cart-screen";
+  
+  const header = document.createElement("div");
+  header.className = "cart-header";
+  header.innerHTML = `<div class="cart-title">Thank You! 🎉</div>`;
+
+  const body = document.createElement("div");
+  body.className = "loyalty-widget";
+  
+  if (!lastOrderSummary) {
+    body.innerHTML = `
+      <div style="text-align: center; padding: 40px 20px;">
+        <div style="font-size: 64px; margin-bottom: 20px;">✅</div>
+        <div style="font-size: 20px; font-weight: 600; color: #0d3b32; margin-bottom: 12px;">Order Delivered!</div>
+        <div style="font-size: 14px; color: #647067;">Thank you for shopping with Mama Mboga!</div>
+      </div>
+    `;
+  } else {
+    body.innerHTML = `
+      <div style="text-align: center; padding: 20px;">
+        <div style="font-size: 80px; margin-bottom: 24px;">🎉</div>
+        <div style="font-size: 24px; font-weight: 600; color: #0d3b32; margin-bottom: 8px;">Asante!</div>
+        <div style="font-size: 16px; color: #647067; margin-bottom: 32px;">Thank you for shopping with Mama Mboga</div>
+        
+        <div style="background: #f6f2e7; border-radius: 12px; padding: 20px; margin-bottom: 24px; text-align: left;">
+          <div style="font-weight: 600; color: #0d3b32; margin-bottom: 12px; font-size: 16px;">Order Summary</div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+            <span style="color: #647067;">Order #</span>
+            <span style="font-weight: 600; color: #0d3b32;">${lastOrderSummary.id}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+            <span style="color: #647067;">Total</span>
+            <span style="font-weight: 600; color: #0d3b32;">KSh ${lastOrderSummary.total}</span>
+          </div>
+          ${lastOrderSummary.awarded ? `
+          <div style="display: flex; justify-content: space-between; font-size: 14px;">
+            <span style="color: #647067;">Points Earned</span>
+            <span style="font-weight: 600; color: #22c55e;">+${lastOrderSummary.awarded}</span>
+          </div>
+          ` : ''}
+        </div>
+        
+        <div style="background: #ffffff; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #e5e0d5;">
+          <div style="font-weight: 600; color: #0d3b32; margin-bottom: 16px; font-size: 16px; text-align: center;">Rate Your Rider</div>
+          <div id="rider-rating" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 16px;">
+            ${[1, 2, 3, 4, 5].map(i => `
+              <button class="star-btn" data-rating="${i}" style="
+                background: none;
+                border: none;
+                font-size: 32px;
+                cursor: pointer;
+                padding: 4px;
+                transition: transform 0.2s;
+              ">⭐</button>
+            `).join('')}
+          </div>
+          <div id="rating-text" style="text-align: center; font-size: 14px; color: #647067; min-height: 20px;"></div>
+        </div>
+      </div>
+    `;
+    
+    // Add star rating functionality
+    setTimeout(() => {
+      const starButtons = body.querySelectorAll('.star-btn');
+      let selectedRating = 0;
+      
+      starButtons.forEach((btn, index) => {
+        btn.onmouseenter = () => {
+          for (let i = 0; i <= index; i++) {
+            starButtons[i].style.transform = 'scale(1.2)';
+            starButtons[i].textContent = '⭐';
+          }
+          for (let i = index + 1; i < starButtons.length; i++) {
+            starButtons[i].style.transform = 'scale(1)';
+            starButtons[i].textContent = '☆';
+          }
+        };
+        
+        btn.onmouseleave = () => {
+          starButtons.forEach((b, i) => {
+            b.style.transform = 'scale(1)';
+            b.textContent = i < selectedRating ? '⭐' : '☆';
+          });
+        };
+        
+        btn.onclick = () => {
+          selectedRating = index + 1;
+          starButtons.forEach((b, i) => {
+            b.textContent = i < selectedRating ? '⭐' : '☆';
+            b.style.transform = 'scale(1)';
+          });
+          
+          const ratingTexts = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
+          const ratingText = body.querySelector('#rating-text');
+          if (ratingText) {
+            ratingText.textContent = ratingTexts[selectedRating];
+            ratingText.style.color = selectedRating >= 4 ? '#22c55e' : selectedRating >= 3 ? '#f97316' : '#dc2626';
+          }
+          
+          // Save rating to backend
+          if (currentUser && currentUser.token) {
+            fetch(`${API_BASE}/api/orders/${lastOrderSummary.id}/rate`, {
+              method: 'POST',
+              headers: authHeaders(),
+              body: JSON.stringify({ rating: selectedRating })
+            }).catch(err => console.error('Failed to save rating:', err));
+          }
+        };
+        
+        // Initialize with empty stars
+        btn.textContent = '☆';
+      });
+    }, 100);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "splash-footer";
+  const homeBtn = document.createElement("button");
+  homeBtn.className = "primary-btn";
+  homeBtn.textContent = "Back to Home";
+  homeBtn.onclick = () => {
+    lastOrderSummary = null; // Clear order summary
+    currentScreen = SCREENS.HOME;
+    render();
+  };
+  const historyBtn = document.createElement("button");
+  historyBtn.className = "secondary-btn";
+  historyBtn.textContent = "View Order History";
+  historyBtn.onclick = () => {
+    lastOrderSummary = null;
+    currentScreen = SCREENS.ORDER_HISTORY;
+    render();
+  };
+  actions.appendChild(homeBtn);
+  actions.appendChild(historyBtn);
 
   wrap.appendChild(header);
   wrap.appendChild(body);
@@ -3877,6 +4328,39 @@ window.addEventListener("beforeinstallprompt", (e) => {
 
 function updateHeroMessageDom() {
   if (currentScreen !== SCREENS.HOME) return;
+  
+  // Check for weekly orders first
+  if (currentUser && currentUser.token) {
+    fetch(`${API_BASE}/api/orders?weeklyOnly=true`, {
+      method: "GET",
+      headers: authHeaders(),
+    })
+    .then(res => res.json())
+    .then(data => {
+      const weeklyOrders = data.orders || [];
+      if (weeklyOrders.length > 0) {
+        const weeklyOrder = weeklyOrders[0];
+        const pill = document.querySelector(".hero-glow-pill");
+        const title = document.querySelector(".hero-glow-title");
+        const sub = document.querySelector(".hero-glow-sub-main");
+        if (pill) pill.textContent = "📅 Weekly Order";
+        if (title) title.textContent = "Your Weekly Order is Active";
+        if (sub) sub.textContent = `Your order will automatically repeat every week. Total: KSh ${weeklyOrder.total}`;
+        return;
+      }
+      // Fallback to regular messages if no weekly orders
+      showRegularHeroMessage();
+    })
+    .catch(() => {
+      // Fallback to regular messages on error
+      showRegularHeroMessage();
+    });
+  } else {
+    showRegularHeroMessage();
+  }
+}
+
+function showRegularHeroMessage() {
   const heroMessages = [
     {
       title: "🎁 Surprise Hamper of the Hour",
@@ -3885,7 +4369,7 @@ function updateHeroMessageDom() {
     },
     {
       title: "🚗 Free delivery over KSh 800",
-      sub: "Shop your weekly basics and we’ll cover delivery from the nearest hub.",
+      sub: "Shop your weekly basics and we'll cover delivery from the nearest hub.",
       pill: "Delivery Glow · 🚙",
     },
     {

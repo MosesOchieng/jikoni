@@ -61,7 +61,49 @@ db.serialize(() => {
       discounts INTEGER,
       deliveryFee INTEGER,
       total INTEGER,
-      createdAt TEXT NOT NULL
+      createdAt TEXT NOT NULL,
+      riderRating INTEGER,
+      isWeekly INTEGER NOT NULL DEFAULT 0,
+      weeklyOrderId TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      riderId TEXT,
+      riderLat REAL,
+      riderLng REAL,
+      lastStatusUpdate TEXT
+    )`
+  );
+  // Add columns if they don't exist (for existing databases)
+  db.run(`ALTER TABLE orders ADD COLUMN riderRating INTEGER`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN isWeekly INTEGER NOT NULL DEFAULT 0`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN weeklyOrderId TEXT`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN riderId TEXT`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN riderLat REAL`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN riderLng REAL`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN lastStatusUpdate TEXT`, () => {});
+  
+  // Create table for rider locations
+  db.run(
+    `CREATE TABLE IF NOT EXISTS rider_locations (
+      riderId TEXT PRIMARY KEY,
+      orderId INTEGER,
+      lat REAL NOT NULL,
+      lng REAL NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (orderId) REFERENCES orders(id)
+    )`
+  );
+  
+  // Create table for push subscriptions
+  db.run(
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      UNIQUE(email, endpoint)
     )`
   );
   db.run(
@@ -161,7 +203,7 @@ mailer.verify((error, success) => {
 });
 
 // Helper function to create email template with Mama Mboga logo
-function createEmailTemplate(title, content, gradientColor = "#f97316") {
+function createEmailTemplate(title, content, gradientColor = "#f97316", host = "mamamboga.com") {
   return `
     <!DOCTYPE html>
     <html>
@@ -177,7 +219,12 @@ function createEmailTemplate(title, content, gradientColor = "#f97316") {
               <!-- Header with Logo -->
               <tr>
                 <td style="background: linear-gradient(135deg, ${gradientColor} 0%, ${gradientColor === "#f97316" ? "#ea580c" : gradientColor === "#22c55e" ? "#16a34a" : "#0284c7"} 100%); padding: 32px 40px; text-align: center;">
-                  <div style="font-size: 36px; font-weight: 700; color: #ffffff; margin-bottom: 8px;">🍅 Mama Mboga</div>
+                  <div style="text-align: center; margin-bottom: 16px;">
+                    <div style="display: inline-block; background: #ffffff; padding: 12px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                      <div style="font-size: 48px; line-height: 1;">🥬</div>
+                    </div>
+                  </div>
+                  <div style="font-size: 28px; font-weight: 700; color: #ffffff; margin-bottom: 8px;">Mama Mboga</div>
                   <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">${title}</h1>
                 </td>
               </tr>
@@ -660,7 +707,7 @@ app.post("/api/cart", authRequired, (req, res) => {
 // ----- Orders (auth required) -----
 
 app.post("/api/orders", authRequired, (req, res) => {
-  const { items, deliveryMethod, paymentMethod, totals } = req.body;
+  const { items, deliveryMethod, paymentMethod, totals, isWeekly } = req.body;
   const email = req.user.email;
   if (!Array.isArray(items) || !items.length) {
     return res.status(400).json({ message: "email and items required" });
@@ -670,10 +717,11 @@ app.post("/api/orders", authRequired, (req, res) => {
   const discounts = totals?.discountTotal ?? 0;
   const deliveryFee = totals?.deliveryFee ?? 0;
   const total = totals?.total ?? 0;
+  const weeklyOrderId = isWeekly ? `weekly-${Date.now()}` : null;
 
   db.run(
-    `INSERT INTO orders (email, itemsJson, deliveryMethod, paymentMethod, subtotal, discounts, deliveryFee, total, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO orders (email, itemsJson, deliveryMethod, paymentMethod, subtotal, discounts, deliveryFee, total, createdAt, isWeekly, weeklyOrderId, status, lastStatusUpdate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       email,
       JSON.stringify(items),
@@ -683,6 +731,10 @@ app.post("/api/orders", authRequired, (req, res) => {
       discounts,
       deliveryFee,
       total,
+      createdAt,
+      isWeekly ? 1 : 0,
+      weeklyOrderId,
+      'confirmed', // Initial status
       createdAt,
     ],
     function orderInserted(err) {
@@ -811,8 +863,12 @@ app.post("/api/orders", authRequired, (req, res) => {
 
 app.get("/api/orders", authRequired, (req, res) => {
   const email = req.user.email;
+  const { weeklyOnly } = req.query;
+  const query = weeklyOnly === "true" 
+    ? "SELECT id, itemsJson, total, createdAt, weeklyOrderId FROM orders WHERE email = ? AND isWeekly = 1 ORDER BY datetime(createdAt) DESC"
+    : "SELECT id, itemsJson, total, createdAt FROM orders WHERE email = ? ORDER BY datetime(createdAt) DESC LIMIT 20";
   db.all(
-    "SELECT id, itemsJson, total, createdAt FROM orders WHERE email = ? ORDER BY datetime(createdAt) DESC LIMIT 20",
+    query,
     [email],
     (err, rows) => {
       if (err) {
@@ -823,6 +879,7 @@ app.get("/api/orders", authRequired, (req, res) => {
         id: row.id,
         total: row.total,
         createdAt: row.createdAt,
+        weeklyOrderId: row.weeklyOrderId || null,
       }));
       res.json({ orders });
     }
@@ -921,6 +978,318 @@ app.post("/api/orders/:orderId/delivered", authRequired, (req, res) => {
       );
     });
   });
+});
+
+// Rate rider for an order
+app.post("/api/orders/:orderId/rate", authRequired, (req, res) => {
+  const { orderId } = req.params;
+  const { rating } = req.body;
+  const email = req.user.email;
+  
+  if (!rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: "Rating must be between 1 and 5" });
+  }
+  
+  db.get("SELECT * FROM orders WHERE id = ? AND email = ?", [orderId, email], (err, order) => {
+    if (err) {
+      console.error("Order lookup error", err);
+      return res.status(500).json({ message: "Could not find order" });
+    }
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    
+    // Update order with rating
+    db.run(
+      "UPDATE orders SET riderRating = ? WHERE id = ?",
+      [rating, orderId],
+      (updateErr) => {
+        if (updateErr) {
+          console.error("Rating update error", updateErr);
+          return res.status(500).json({ message: "Could not save rating" });
+        }
+        res.json({ message: "Rating saved", rating });
+      }
+    );
+  });
+});
+
+// ----- Real-time Order Updates (Server-Sent Events) -----
+
+// Store active SSE connections
+const sseConnections = new Map(); // orderId -> Set of response objects
+
+// SSE endpoint for order tracking
+// Note: EventSource doesn't support custom headers, so we pass token as query param
+app.get("/api/orders/:orderId/stream", (req, res) => {
+  const { orderId } = req.params;
+  const token = req.query.token;
+  
+  if (!token) {
+    return res.status(401).json({ message: "Token required" });
+  }
+  
+  // Verify token
+  let decoded;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
+  
+  const email = decoded.email;
+  
+  // Verify user owns this order
+  db.get("SELECT * FROM orders WHERE id = ? AND email = ?", [orderId, email], (err, order) => {
+    if (err || !order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering in nginx
+    
+    // Store connection
+    if (!sseConnections.has(orderId)) {
+      sseConnections.set(orderId, new Set());
+    }
+    sseConnections.get(orderId).add(res);
+    
+    // Send initial state
+    db.get("SELECT status, riderLat, riderLng, lastStatusUpdate FROM orders WHERE id = ?", [orderId], (err, orderData) => {
+      if (!err && orderData) {
+        res.write(`data: ${JSON.stringify({
+          type: 'status',
+          status: orderData.status || 'pending',
+          riderLat: orderData.riderLat,
+          riderLng: orderData.riderLng,
+          timestamp: orderData.lastStatusUpdate || new Date().toISOString()
+        })}\n\n`);
+      }
+    });
+    
+    // Send heartbeat every 30 seconds to keep connection alive
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(`: heartbeat\n\n`);
+      } catch (err) {
+        clearInterval(heartbeat);
+      }
+    }, 30000);
+    
+    // Clean up on client disconnect
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      if (sseConnections.has(orderId)) {
+        sseConnections.get(orderId).delete(res);
+        if (sseConnections.get(orderId).size === 0) {
+          sseConnections.delete(orderId);
+        }
+      }
+    });
+  });
+});
+
+// Helper function to broadcast order updates to all connected clients
+function broadcastOrderUpdate(orderId, data) {
+  if (sseConnections.has(orderId)) {
+    const message = `data: ${JSON.stringify(data)}\n\n`;
+    sseConnections.get(orderId).forEach(res => {
+      try {
+        res.write(message);
+      } catch (err) {
+        // Client disconnected, remove from set
+        sseConnections.get(orderId).delete(res);
+      }
+    });
+  }
+}
+
+// ----- Order Status Management -----
+
+// Update order status (for riders/admin)
+app.put("/api/orders/:orderId/status", authRequired, (req, res) => {
+  const { orderId } = req.params;
+  const { status, riderId, riderLat, riderLng } = req.body;
+  const email = req.user.email;
+  
+  const validStatuses = ['pending', 'confirmed', 'preparing', 'dispatched', 'on_the_way', 'arrived', 'delivered'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ message: "Invalid status" });
+  }
+  
+  db.get("SELECT * FROM orders WHERE id = ?", [orderId], (err, order) => {
+    if (err) {
+      console.error("Order lookup error", err);
+      return res.status(500).json({ message: "Could not find order" });
+    }
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    
+    // Update order status
+    const updateData = {
+      status,
+      lastStatusUpdate: new Date().toISOString()
+    };
+    
+    if (riderId) updateData.riderId = riderId;
+    if (riderLat !== undefined) updateData.riderLat = riderLat;
+    if (riderLng !== undefined) updateData.riderLng = riderLng;
+    
+    const setClause = Object.keys(updateData).map(k => `${k} = ?`).join(', ');
+    const values = Object.values(updateData);
+    values.push(orderId);
+    
+    db.run(
+      `UPDATE orders SET ${setClause} WHERE id = ?`,
+      values,
+      (updateErr) => {
+        if (updateErr) {
+          console.error("Status update error", updateErr);
+          return res.status(500).json({ message: "Could not update status" });
+        }
+        
+        // Broadcast update to connected clients
+        broadcastOrderUpdate(orderId, {
+          type: 'status',
+          status,
+          riderLat,
+          riderLng,
+          timestamp: updateData.lastStatusUpdate
+        });
+        
+        // If rider location provided, update rider_locations table
+        if (riderLat !== undefined && riderLng !== undefined && riderId) {
+          db.run(
+            `INSERT OR REPLACE INTO rider_locations (riderId, orderId, lat, lng, updatedAt)
+             VALUES (?, ?, ?, ?, ?)`,
+            [riderId, orderId, riderLat, riderLng, updateData.lastStatusUpdate],
+            () => {}
+          );
+        }
+        
+        res.json({ message: "Status updated", status, orderId });
+      }
+    );
+  });
+});
+
+// Update rider location (for rider app)
+app.post("/api/orders/:orderId/rider-location", authRequired, (req, res) => {
+  const { orderId } = req.params;
+  const { riderId, lat, lng } = req.body;
+  
+  if (!riderId || lat === undefined || lng === undefined) {
+    return res.status(400).json({ message: "riderId, lat, and lng required" });
+  }
+  
+  db.get("SELECT * FROM orders WHERE id = ?", [orderId], (err, order) => {
+    if (err || !order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    
+    // Update order with rider location
+    db.run(
+      "UPDATE orders SET riderLat = ?, riderLng = ?, riderId = ?, lastStatusUpdate = ? WHERE id = ?",
+      [lat, lng, riderId, new Date().toISOString(), orderId],
+      (updateErr) => {
+        if (updateErr) {
+          return res.status(500).json({ message: "Could not update location" });
+        }
+        
+        // Update rider_locations table
+        db.run(
+          `INSERT OR REPLACE INTO rider_locations (riderId, orderId, lat, lng, updatedAt)
+           VALUES (?, ?, ?, ?, ?)`,
+          [riderId, orderId, lat, lng, new Date().toISOString()],
+          () => {}
+        );
+        
+        // Broadcast location update
+        broadcastOrderUpdate(orderId, {
+          type: 'location',
+          riderLat: lat,
+          riderLng: lng,
+          timestamp: new Date().toISOString()
+        });
+        
+        res.json({ message: "Location updated", lat, lng });
+      }
+    );
+  });
+});
+
+// Get current order status and rider location
+app.get("/api/orders/:orderId/status", authRequired, (req, res) => {
+  const { orderId } = req.params;
+  const email = req.user.email;
+  
+  db.get(
+    "SELECT status, riderId, riderLat, riderLng, lastStatusUpdate FROM orders WHERE id = ? AND email = ?",
+    [orderId, email],
+    (err, order) => {
+      if (err) {
+        return res.status(500).json({ message: "Could not fetch order status" });
+      }
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      
+      res.json({
+        status: order.status || 'pending',
+        riderId: order.riderId,
+        riderLat: order.riderLat,
+        riderLng: order.riderLng,
+        lastUpdate: order.lastStatusUpdate
+      });
+    }
+  );
+});
+
+// ----- Push Notifications -----
+
+// Subscribe to push notifications
+app.post("/api/push/subscribe", authRequired, (req, res) => {
+  const email = req.user.email;
+  const { endpoint, keys } = req.body;
+  
+  if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
+    return res.status(400).json({ message: "Invalid subscription data" });
+  }
+  
+  db.run(
+    `INSERT OR REPLACE INTO push_subscriptions (email, endpoint, p256dh, auth, createdAt)
+     VALUES (?, ?, ?, ?, ?)`,
+    [email, endpoint, keys.p256dh, keys.auth, new Date().toISOString()],
+    (err) => {
+      if (err) {
+        console.error("Push subscription error", err);
+        return res.status(500).json({ message: "Could not save subscription" });
+      }
+      res.json({ message: "Subscribed to push notifications" });
+    }
+  );
+});
+
+// Unsubscribe from push notifications
+app.post("/api/push/unsubscribe", authRequired, (req, res) => {
+  const email = req.user.email;
+  const { endpoint } = req.body;
+  
+  db.run(
+    "DELETE FROM push_subscriptions WHERE email = ? AND endpoint = ?",
+    [email, endpoint],
+    (err) => {
+      if (err) {
+        return res.status(500).json({ message: "Could not unsubscribe" });
+      }
+      res.json({ message: "Unsubscribed from push notifications" });
+    }
+  );
 });
 
 // ----- Loyalty summary (auth required) -----
