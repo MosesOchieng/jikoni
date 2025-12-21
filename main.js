@@ -1442,14 +1442,16 @@ function renderOrderTracking() {
     : new Date();
   const now = new Date();
   const minutes = Math.max(
-    5, // Stop at 5 minutes minimum
+    0, // Start from 0 minutes
     Math.floor((now.getTime() - placedAt.getTime()) / 60000)
   );
+  // Progressive stage calculation - each stage takes proper time
   let stage = 0;
-  if (minutes >= 0) stage = 1;
-  if (minutes >= 3) stage = 2;
-  if (minutes >= 8) stage = 3;
-  if (minutes >= 15) stage = 4;
+  if (minutes >= 0 && minutes < 2) stage = 0;  // Order received: 0-2 min
+  else if (minutes >= 2 && minutes < 5) stage = 1;  // Being prepared: 2-5 min
+  else if (minutes >= 5 && minutes < 10) stage = 2;  // Order dispatched: 5-10 min
+  else if (minutes >= 10 && minutes < 18) stage = 3;  // On the way: 10-18 min
+  else if (minutes >= 18) stage = 4;  // Almost there: 18+ min
 
   const nearestHub = getNearestHubForAddress(deliveryAddress);
   // Get hub coordinates with fallbacks
@@ -2166,9 +2168,15 @@ function renderOrderTracking() {
       }
       
       // Fallback: Auto-update tracking every 5 seconds if SSE not available
+      // This handles API polling for real order status
       if (orderTrackingInterval) clearInterval(orderTrackingInterval);
+      // Initialize: API polling is active if we have order summary and no SSE
+      let apiPollingActive = (lastOrderSummary && !eventSource);
+      let apiPollingFailed = false;
       orderTrackingInterval = setInterval(() => {
         if (lastOrderSummary && mapInstance && !eventSource) {
+          apiPollingActive = true;
+          apiPollingFailed = false;
           // Fetch current status from API
           fetch(`${API_BASE}/api/orders/${lastOrderSummary.id}/status`, {
             headers: authHeaders()
@@ -2222,30 +2230,42 @@ function renderOrderTracking() {
           })
           .catch(err => {
             console.error('Failed to fetch order status:', err);
+            apiPollingActive = false; // API failed, allow time-based simulation
+            apiPollingFailed = true; // Mark that API polling has failed
             // Fallback to time-based simulation
-            const newMinutes = Math.max(5, Math.floor((new Date().getTime() - placedAt.getTime()) / 60000));
+            const newMinutes = Math.max(0, Math.floor((new Date().getTime() - placedAt.getTime()) / 60000));
+            // Progressive stage calculation - each stage takes proper time
             let newStage = 0;
-            if (newMinutes >= 0) newStage = 1;
-            if (newMinutes >= 3) newStage = 2;
-            if (newMinutes >= 8) newStage = 3;
-            if (newMinutes >= 15) newStage = 4;
+            if (newMinutes >= 0 && newMinutes < 2) newStage = 0;  // Order received: 0-2 min
+            else if (newMinutes >= 2 && newMinutes < 5) newStage = 1;  // Being prepared: 2-5 min
+            else if (newMinutes >= 5 && newMinutes < 10) newStage = 2;  // Order dispatched: 5-10 min
+            else if (newMinutes >= 10 && newMinutes < 18) newStage = 3;  // On the way: 10-18 min
+            else if (newMinutes >= 18) newStage = 4;  // Almost there: 18+ min
             updateStatusOverlay(newStage, newMinutes);
           });
+        } else {
+          apiPollingActive = false; // API polling not active
         }
       }, 5000);
 
       // Always update rider position and status - ensure it's always visible
       // Use road route if available, otherwise fallback to straight line
+      // Only run this if SSE is not available AND (API polling failed or not configured)
+      // This prevents duplicate markers - API polling takes priority
       if (orderTrackingInterval2) clearInterval(orderTrackingInterval2);
       orderTrackingInterval2 = setInterval(() => {
-        if (mapInstance) {
+        // Only run if SSE is not available AND (API polling failed or not active)
+        // This prevents duplicate markers - API polling takes priority
+        if (mapInstance && !eventSource && (apiPollingFailed || !apiPollingActive)) {
           // Calculate new stage and minutes based on elapsed time
-          const newMinutes = Math.max(5, Math.floor((new Date().getTime() - placedAt.getTime()) / 60000));
+          const newMinutes = Math.max(0, Math.floor((new Date().getTime() - placedAt.getTime()) / 60000));
+          // Progressive stage calculation - each stage takes proper time
           let newStage = 0;
-          if (newMinutes >= 0) newStage = 1;
-          if (newMinutes >= 3) newStage = 2;
-          if (newMinutes >= 8) newStage = 3;
-          if (newMinutes >= 15) newStage = 4;
+          if (newMinutes >= 0 && newMinutes < 2) newStage = 0;  // Order received: 0-2 min
+          else if (newMinutes >= 2 && newMinutes < 5) newStage = 1;  // Being prepared: 2-5 min
+          else if (newMinutes >= 5 && newMinutes < 10) newStage = 2;  // Order dispatched: 5-10 min
+          else if (newMinutes >= 10 && newMinutes < 18) newStage = 3;  // On the way: 10-18 min
+          else if (newMinutes >= 18) newStage = 4;  // Almost there: 18+ min
 
           // Update status overlay - THIS WAS MISSING!
           updateStatusOverlay(newStage, newMinutes);
@@ -2260,7 +2280,9 @@ function renderOrderTracking() {
             newRiderLat = deliveryCoords[0];
             newRiderLng = deliveryCoords[1];
           } else {
-            const progress = Math.min(1, Math.max(0, (newMinutes - 3) / 12));
+            // Calculate progress for stages 2-3 (dispatched to on the way)
+            // Stage 2 starts at 5 min, stage 3 at 10 min, stage 4 at 18 min
+            const progress = newStage < 2 ? 0 : newStage >= 4 ? 1 : Math.min(1, Math.max(0, (newMinutes - 5) / 13));
             
             // If we have a road route, use it to find the position along the route
             if (roadRoute && roadRoute.length > 1) {
