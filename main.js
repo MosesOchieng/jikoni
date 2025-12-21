@@ -57,6 +57,7 @@ let deferredInstallPrompt = null;
 let currentCategory = null; // For filtering products by category
 let deliveryAddress = "";
 let orderTrackingInterval = null;
+let orderTrackingInterval2 = null;
 let pushSubscription = null;
 
 function authHeaders() {
@@ -1523,6 +1524,10 @@ function renderOrderTracking() {
       clearInterval(orderTrackingInterval);
       orderTrackingInterval = null;
     }
+    if (orderTrackingInterval2) {
+      clearInterval(orderTrackingInterval2);
+      orderTrackingInterval2 = null;
+    }
     // Don't clear lastOrderSummary, just go back to regular homepage
     // The tracking will be accessible via the popup
     currentScreen = SCREENS.HOME;
@@ -2232,6 +2237,19 @@ function renderOrderTracking() {
           });
         }
       }, 5000);
+
+      // Always update rider position - ensure it's always visible
+      // Use road route if available, otherwise fallback to straight line
+      if (orderTrackingInterval2) clearInterval(orderTrackingInterval2);
+      orderTrackingInterval2 = setInterval(() => {
+        if (mapInstance) {
+          // Calculate new stage and minutes based on elapsed time
+          const newMinutes = Math.max(5, Math.floor((new Date().getTime() - placedAt.getTime()) / 60000));
+          let newStage = 0;
+          if (newMinutes >= 0) newStage = 1;
+          if (newMinutes >= 3) newStage = 2;
+          if (newMinutes >= 8) newStage = 3;
+          if (newMinutes >= 15) newStage = 4;
 
           // Always update rider position - ensure it's always visible
           // Use road route if available, otherwise fallback to straight line
