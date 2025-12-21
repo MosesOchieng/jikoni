@@ -1528,6 +1528,15 @@ function renderOrderTracking() {
       clearInterval(orderTrackingInterval2);
       orderTrackingInterval2 = null;
     }
+    // Clean up map markers
+    if (riderMarker && mapInstance) {
+      mapInstance.removeLayer(riderMarker);
+      riderMarker = null;
+    }
+    if (routeLine && mapInstance) {
+      mapInstance.removeLayer(routeLine);
+      routeLine = null;
+    }
     // Don't clear lastOrderSummary, just go back to regular homepage
     // The tracking will be accessible via the popup
     currentScreen = SCREENS.HOME;
@@ -1632,7 +1641,7 @@ function renderOrderTracking() {
   // Append status overlay to mapContainer so it stays above the map
   mapContainer.appendChild(statusOverlay);
 
-  // Store map reference for updates
+  // Store map reference for updates (declared here so cleanup can access them)
   let mapInstance = null;
   let riderMarker = null;
   let routeLine = null;
@@ -1864,24 +1873,8 @@ function renderOrderTracking() {
         `;
       };
 
-      // Always add rider marker - it will be visible from the start
-      riderMarker = L.marker([riderLat, riderLng], { 
-        icon: riderIcon, 
-        zIndexOffset: 1000 // Highest z-index to ensure it's always on top
-      }).addTo(mapInstance)
-        .bindPopup(createRiderPopupContent(stage, minutes), { 
-          className: 'custom-popup',
-          closeButton: true,
-          autoClose: false, // Don't auto-close when clicking elsewhere
-          closeOnClick: false, // Don't close when clicking the map
-          autoPan: true,
-          maxWidth: 280
-        });
-
-      // Add click handler to open popup and keep it open
-      riderMarker.on('click', function() {
-        this.openPopup();
-      });
+      // Rider marker will be created by the update interval
+      // Don't create it here to avoid duplicates
 
       // Function to get road route using OSRM
       const getRoadRoute = async (start, end) => {
@@ -2091,6 +2084,9 @@ function renderOrderTracking() {
         });
       };
 
+      // Initial status overlay update
+      updateStatusOverlay(stage, minutes);
+
       // Connect to Server-Sent Events for real-time updates
       let eventSource = null;
       if (currentUser && currentUser.token && lastOrderSummary) {
@@ -2238,7 +2234,7 @@ function renderOrderTracking() {
         }
       }, 5000);
 
-      // Always update rider position - ensure it's always visible
+      // Always update rider position and status - ensure it's always visible
       // Use road route if available, otherwise fallback to straight line
       if (orderTrackingInterval2) clearInterval(orderTrackingInterval2);
       orderTrackingInterval2 = setInterval(() => {
@@ -2250,6 +2246,9 @@ function renderOrderTracking() {
           if (newMinutes >= 3) newStage = 2;
           if (newMinutes >= 8) newStage = 3;
           if (newMinutes >= 15) newStage = 4;
+
+          // Update status overlay - THIS WAS MISSING!
+          updateStatusOverlay(newStage, newMinutes);
 
           // Always update rider position - ensure it's always visible
           // Use road route if available, otherwise fallback to straight line
@@ -2309,9 +2308,10 @@ function renderOrderTracking() {
             }
           }
           
-          // Update route line - use road route if available
+          // Update route line - remove old one first to avoid duplicates
           if (routeLine) {
             mapInstance.removeLayer(routeLine);
+            routeLine = null;
           }
           
           // If we have a road route, use it; otherwise use straight line
@@ -2321,6 +2321,13 @@ function renderOrderTracking() {
           } else {
             routeToDraw = [hubCoords, deliveryCoords];
           }
+          
+          // Remove any existing shadow lines
+          mapInstance.eachLayer((layer) => {
+            if (layer instanceof L.Polyline && layer.options.color === '#ffffff') {
+              mapInstance.removeLayer(layer);
+            }
+          });
           
           // Add shadow line first
           L.polyline(routeToDraw, {
@@ -2342,9 +2349,8 @@ function renderOrderTracking() {
             lineJoin: 'round'
           }).addTo(mapInstance);
 
-          if (newStage !== stage) {
-            stage = newStage;
-          }
+          // Update stage variable
+          stage = newStage;
         }
       }, 5000);
     } else {
