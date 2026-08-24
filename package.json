@@ -1,22 +1,19 @@
 {
-  "name": "mama-mboga",
-  "version": "1.0.0",
-  "description": "",
-  "main": "main.js",
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf dist && mkdir -p dist && cp index.html dist/index.html && cp main.js dist/main.js && cp styles.css dist/styles.css && cp sw.js dist/sw.js && cp manifest.webmanifest dist/manifest.webmanifest && cp -r public dist/public && mkdir -p dist/icons && cp public/icons/app.jpeg dist/icons/app.jpeg && cp public/logo.png dist/logo.png",
-    "start": "node server.js"
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "private": true,
   "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^7.0.10",
-    "sqlite3": "^5.1.7"
+    "@replit/connectors-sdk": "^0.4.1"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3"
   }
 }
