@@ -1,0 +1,22 @@
+{
+  "name": "Mama Mboga",
+  "short_name": "Mama Mboga",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#f6f2e7",
+  "theme_color": "#22c55e",
+  "icons": [
+    {
+      "src": "/icons/app.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/icons/app.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
+
+
