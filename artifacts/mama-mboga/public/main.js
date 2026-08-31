@@ -22,7 +22,7 @@ const SCREENS = {
   DELIVERY_CONFIRMED: "deliveryConfirmed",
 };
 
-let currentScreen = SCREENS.LOADER;
+let currentScreen = SCREENS.AUTH_CHOICE;
 let toastTimeout = null;
 let currentUser = null;
 let pendingUser = null;
@@ -360,8 +360,8 @@ function loadProducts() {
     })
     .then((data) => {
       productsData = data.products || [];
-      if (currentScreen === SCREENS.SEARCH) {
-        render(); // Re-render search if we're on that screen
+      if (currentScreen === SCREENS.SEARCH || currentScreen === SCREENS.HOME) {
+        render(); // Re-render product-driven screens when the catalog arrives
       }
     })
     .catch((err) => {
@@ -2435,7 +2435,7 @@ function renderHome() {
   header.innerHTML = `
     <div class="home-title-block">
       <div class="home-greeting">Good evening, ${currentUser?.name || "Moses"}</div>
-      <div class="home-title"></div>
+      <div class="home-title">What are we cooking?</div>
     </div>
   `;
   const right = document.createElement("div");
@@ -3942,7 +3942,13 @@ function renderOrderHistory() {
   const body = document.createElement("div");
   body.className = "loyalty-widget";
   body.style.minHeight = "200px";
-  body.innerHTML = `<div style="text-align:center; padding:20px;">Loading orders...</div>`;
+  body.innerHTML = `
+    <div class="section-state-card">
+      <div class="section-state-icon">◌</div>
+      <strong>Loading your orders</strong>
+      <span>Just a moment while we fetch your basket history.</span>
+    </div>
+  `;
 
   if (!currentUser || !currentUser.token) {
     body.innerHTML = `
@@ -3980,11 +3986,17 @@ function renderOrderHistory() {
         const orders = data.orders || [];
         if (orders.length === 0) {
           body.innerHTML = `
-            <div style="text-align:center; padding:20px;">
-              <div>No orders yet.</div>
-              <div style="font-size:13px; margin-top:8px; color:#666;">Start shopping to see your orders here!</div>
+            <div class="section-state-card">
+              <div class="section-state-icon">🧺</div>
+              <strong>Your order story starts here</strong>
+              <span>Once you place an order, your receipts and delivery updates will appear here.</span>
+              <button class="state-action" type="button">Start shopping</button>
             </div>
           `;
+          body.querySelector(".state-action").onclick = () => {
+            currentScreen = SCREENS.SEARCH;
+            render();
+          };
           return;
         }
         
@@ -4016,11 +4028,14 @@ function renderOrderHistory() {
         console.error(err);
         if (err.message !== "unauthorized") {
           body.innerHTML = `
-            <div style="text-align:center; padding:20px; color:#d32f2f;">
-              <div>Could not load orders.</div>
-              <div style="font-size:12px; margin-top:4px;">${err.message || "Please try again later."}</div>
+            <div class="section-state-card is-error">
+              <div class="section-state-icon">!</div>
+              <strong>We couldn’t load your orders</strong>
+              <span>${err.message || "Please check your connection and try again."}</span>
+              <button class="state-action" type="button">Try again</button>
             </div>
           `;
+          body.querySelector(".state-action").onclick = () => render();
         }
       });
   }
@@ -4163,12 +4178,21 @@ function renderSearch() {
 
     if (filteredProducts.length === 0) {
       grid.innerHTML = `
-        <div style="grid-column: 1 / -1; text-align:center; padding:40px; color:#666;">
-          <div>No products found</div>
-          <div style="font-size:13px; margin-top:8px;">Try a different category or search term</div>
+        <div class="section-state-card grid-state">
+          <div class="section-state-icon">⌕</div>
+          <strong>No groceries found</strong>
+          <span>Try a different search, or ask Mama Mboga AI for an idea.</span>
+          <button class="state-action" type="button">View all groceries</button>
         </div>
       `;
       gridContainer.appendChild(grid);
+      grid.querySelector(".state-action").onclick = () => {
+        currentCategory = null;
+        searchInput.value = "";
+        searchQuery = "";
+        aiProductIds = null;
+        renderProductGrid();
+      };
       return;
     }
 
@@ -4445,15 +4469,14 @@ function renderFooterNav() {
   const existing = document.querySelector(".footer-nav");
   if (existing) existing.remove();
 
-  // Only show footer navigation on main app screens, not splash/auth flows
-  if (
-    currentScreen === SCREENS.SPLASH_1 ||
-    currentScreen === SCREENS.SPLASH_2 ||
-    currentScreen === SCREENS.AUTH_CHOICE ||
-    currentScreen === SCREENS.SIGN_UP ||
-    currentScreen === SCREENS.LOGIN ||
-    currentScreen === SCREENS.VERIFY
-  ) {
+  const mainScreens = new Set([
+    SCREENS.HOME,
+    SCREENS.SEARCH,
+    SCREENS.CART,
+    SCREENS.LOYALTY,
+    SCREENS.PROFILE,
+  ]);
+  if (!mainScreens.has(currentScreen)) {
     return;
   }
 
@@ -4463,17 +4486,24 @@ function renderFooterNav() {
   inner.className = "footer-nav-inner";
 
   const tabs = [
-    { id: SCREENS.HOME, icon: "🏠", label: "Home" },
-    { id: SCREENS.SEARCH, icon: "🔍", label: "Search" },
-    { id: SCREENS.CART, icon: "🛒", label: "Cart" },
-    { id: SCREENS.LOYALTY, icon: "⭐", label: "Loyalty" },
-    { id: SCREENS.PROFILE, icon: "👤", label: "Profile" },
+    { id: SCREENS.HOME, icon: "⌂", label: "Home" },
+    { id: SCREENS.SEARCH, icon: "⌕", label: "Browse" },
+    { id: SCREENS.CART, icon: "▱", label: "Basket" },
+    { id: SCREENS.LOYALTY, icon: "✦", label: "Rewards" },
+    { id: SCREENS.PROFILE, icon: "○", label: "You" },
   ];
 
   tabs.forEach((tab) => {
     const btn = document.createElement("button");
     btn.className = "footer-tab" + (currentScreen === tab.id ? " active" : "");
-    btn.innerHTML = `<span>${tab.icon}</span><div>${tab.label}</div>`;
+    btn.type = "button";
+    btn.setAttribute("aria-label", tab.label);
+    if (currentScreen === tab.id) btn.setAttribute("aria-current", "page");
+    btn.innerHTML = `
+      <span class="footer-tab-icon">${tab.icon}</span>
+      <span class="footer-tab-label">${tab.label}</span>
+      ${tab.id === SCREENS.CART && cart.length ? `<span class="footer-cart-badge">${cart.reduce((sum, item) => sum + item.qty, 0)}</span>` : ""}
+    `;
     btn.addEventListener("click", () => {
       currentScreen = tab.id;
       render();
@@ -4668,19 +4698,12 @@ function startHeroTimer() {
 loadState();
 loadHubs();
 loadProducts();
-setTimeout(() => {
-  if (currentUser && currentUser.isVerified) {
-    currentScreen = SCREENS.HOME;
-  } else {
-    currentScreen = SCREENS.SPLASH_1;
-  }
-  render();
-}, 1500);
+currentScreen = currentUser && currentUser.isVerified ? SCREENS.HOME : SCREENS.AUTH_CHOICE;
+render();
 setInterval(() => {
   heroIndex = (heroIndex + 1) % 3;
   updateHeroMessageDom();
 }, 7000);
-render();
 
 function isIOS() {
   const ua = window.navigator.userAgent.toLowerCase();
