@@ -37,6 +37,7 @@ let loyaltyState = { points: 0, streak: 0, toNextReward: 100 };
 let botOpen = false;
 let botMessages = [];
 let botState = "idle"; // "idle", "listening", "talking"
+let pendingBotAction = null;
 let productsData = [];
 let heroTimerSeconds = 59;
 let notificationPrefs = { streakReminders: true, hamperAlerts: true };
@@ -2720,6 +2721,34 @@ function parseShoppingList(text) {
   return { matches, unknown };
 }
 
+function getProductById(id) {
+  return productsData.find((product) => product.id === id);
+}
+
+function applyAssistantItems(items) {
+  (items || []).forEach((item) => {
+    const product = getProductById(item.productId);
+    if (!product) return;
+    const quantity = Math.min(20, Math.max(1, Number(item.quantity) || 1));
+    for (let index = 0; index < quantity; index += 1) addToCart(product);
+  });
+  saveCart();
+}
+
+async function requestAiAssistant(message) {
+  const response = await fetch(`${API_BASE}/api/ai/assist`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      products: productsData,
+      cart: cart.map((item) => ({ productId: item.id, quantity: item.qty })),
+    }),
+  });
+  if (!response.ok) throw new Error("AI assistant unavailable");
+  return response.json();
+}
+
 function renderShoppingListHelper() {
   const helper = document.createElement("section");
   helper.className = "shopping-list-helper";
@@ -2741,21 +2770,44 @@ function renderShoppingListHelper() {
   const input = helper.querySelector(".shopping-list-input");
   const button = helper.querySelector(".shopping-list-btn");
   const result = helper.querySelector(".shopping-list-result");
-  button.addEventListener("click", () => {
-    const { matches, unknown } = parseShoppingList(input.value);
-    if (!matches.length && unknown.length) {
-      result.textContent = `We couldn’t match ${unknown.join(", ")}. Try a product name from the shop.`;
+  button.addEventListener("click", async () => {
+    const text = input.value.trim();
+    if (!text) {
+      result.textContent = "Paste a few groceries first.";
       result.className = "shopping-list-result is-warning";
       return;
     }
-    matches.forEach(({ product, qty }) => {
-      for (let index = 0; index < qty; index += 1) addToCart(product);
-    });
-    const addedNames = matches.map(({ product, qty }) => `${product.name}${qty > 1 ? ` ×${qty}` : ""}`);
-    result.textContent = `${addedNames.join(", ")} added${unknown.length ? `. Not matched: ${unknown.join(", ")}` : "."}`;
+    button.disabled = true;
+    button.textContent = "Understanding…";
+    result.textContent = "Mama Mboga AI is matching your list…";
+    result.className = "shopping-list-result is-success";
+    let items = [];
+    let unknown = [];
+    try {
+      const ai = await requestAiAssistant(text);
+      items = ai.items || [];
+      unknown = ai.unknownItems || [];
+    } catch {
+      const fallback = parseShoppingList(text);
+      items = fallback.matches.map(({ product, qty }) => ({ productId: product.id, quantity: qty }));
+      unknown = fallback.unknown;
+    }
+    if (!items.length) {
+      result.textContent = `We couldn’t match ${unknown.join(", ") || "that list"}. Try a product name from the shop.`;
+      result.className = "shopping-list-result is-warning";
+      button.disabled = false;
+      button.textContent = "Add list to cart";
+      return;
+    }
+    applyAssistantItems(items);
+    const addedNames = items
+      .map((item) => getProductById(item.productId)?.name)
+      .filter(Boolean)
+      .join(", ");
+    result.textContent = `${addedNames} added${unknown.length ? `. Not matched: ${unknown.join(", ")}` : "."}`;
     result.className = `shopping-list-result ${unknown.length ? "is-warning" : "is-success"}`;
     input.value = "";
-    showToast(`${matches.length} grocery ${matches.length === 1 ? "item" : "items"} added`);
+    showToast(`${items.length} grocery ${items.length === 1 ? "item" : "items"} added`);
     setTimeout(() => render(), 450);
   });
   return helper;
@@ -4006,15 +4058,46 @@ function renderSearch() {
   searchBar.style.margin = "12px 16px";
   const searchInput = document.createElement("input");
   searchInput.className = "search-input";
-  searchInput.placeholder = "Search products...";
+  searchInput.placeholder = "Search products or ask for a meal...";
   searchInput.style.width = "100%";
   let searchQuery = "";
+  let aiProductIds = null;
   searchInput.addEventListener("input", (e) => {
     searchQuery = e.target.value.toLowerCase();
+    aiProductIds = null;
     renderProductGrid();
   });
   searchBar.appendChild(searchInput);
   wrap.appendChild(searchBar);
+
+  const aiSearchBtn = document.createElement("button");
+  aiSearchBtn.type = "button";
+  aiSearchBtn.className = "ai-search-btn";
+  aiSearchBtn.innerHTML = "✦ Ask Mama Mboga AI to find it";
+  aiSearchBtn.addEventListener("click", async () => {
+    const text = searchInput.value.trim();
+    if (!text) {
+      showToast("Type what you’re looking for first.");
+      searchInput.focus();
+      return;
+    }
+    aiSearchBtn.disabled = true;
+    aiSearchBtn.textContent = "Understanding your request…";
+    try {
+      const data = await requestAiAssistant(`Find products for: ${text}`);
+      const ids = (data.items || []).map((item) => item.productId);
+      aiProductIds = new Set(ids);
+      searchQuery = "";
+      renderProductGrid();
+      showToast(ids.length ? `Found ${ids.length} matching grocery items` : "No matching groceries found");
+    } catch {
+      showToast("AI search is unavailable. Try a product name instead.");
+    } finally {
+      aiSearchBtn.disabled = false;
+      aiSearchBtn.innerHTML = "✦ Ask Mama Mboga AI to find it";
+    }
+  });
+  wrap.appendChild(aiSearchBtn);
 
   // Category filter chips
   const categoryRow = document.createElement("div");
@@ -4067,6 +4150,9 @@ function renderSearch() {
       filteredProducts = productsData.filter((p) => 
         p.category.toLowerCase() === searchCategory.toLowerCase()
       );
+    }
+    if (aiProductIds) {
+      filteredProducts = filteredProducts.filter((p) => aiProductIds.has(p.id));
     }
     if (searchQuery) {
       filteredProducts = filteredProducts.filter((p) =>
@@ -4244,6 +4330,30 @@ function renderBotOverlay() {
     list.appendChild(b);
   });
 
+  if (pendingBotAction?.length) {
+    const action = document.createElement("div");
+    action.className = "bot-action-card";
+    const names = pendingBotAction
+      .map((item) => {
+        const product = getProductById(item.productId);
+        return product ? `${product.name}${item.quantity > 1 ? ` ×${item.quantity}` : ""}` : "";
+      })
+      .filter(Boolean);
+    action.innerHTML = `
+      <div class="bot-action-title">Ready to update your basket?</div>
+      <div class="bot-action-items">${names.join(" · ")}</div>
+      <button type="button" class="bot-action-confirm">Yes, add to cart</button>
+    `;
+    action.querySelector(".bot-action-confirm").addEventListener("click", () => {
+      applyAssistantItems(pendingBotAction);
+      botMessages.push({ from: "bot", text: "Done — I added those groceries to your cart." });
+      pendingBotAction = null;
+      botState = "idle";
+      render();
+    });
+    sheet.appendChild(action);
+  }
+
   const inputRow = document.createElement("div");
   inputRow.className = "bot-input-row";
   const input = document.createElement("input");
@@ -4282,72 +4392,40 @@ function renderBotOverlay() {
   list.scrollTop = list.scrollHeight;
 }
 
-function handleBotUserMessage(text) {
+async function handleBotUserMessage(text) {
   botMessages.push({ from: "user", text });
-  
-  // Update bot state to listening
   botState = "listening";
   updateVoiceBotIcon();
-  
-  const lower = text.toLowerCase();
-
-  // Simulate bot processing (talking state)
-  setTimeout(() => {
+  renderBotOverlay();
+  try {
+    const data = await requestAiAssistant(text);
     botState = "talking";
-    updateVoiceBotIcon();
-
-    if (lower.includes("offer") || lower.includes("on offer")) {
-      botMessages.push({
-        from: "bot",
-        text:
-          "Today's glow offers: 🥬 Sukuma at 20% off, 🥚 buy 10 eggs earn extra points, and a Supper Starter Kit combo.",
-      });
-    } else if (lower.includes("usual") || lower.includes("dinner hamper")) {
-    const items = [
-      { id: "sukuma", name: "Sukuma Wiki", meta: "500 g", price: 40 },
-      { id: "tomatoes", name: "Tomatoes", meta: "1 kg", price: 80 },
-      { id: "onions", name: "Onions", meta: "1 kg", price: 90 },
-      { id: "eggs", name: "Eggs Tray", meta: "30 pcs", price: 420 },
-    ];
-    items.forEach(addToCart);
-    saveCart();
-    botMessages.push({
-      from: "bot",
-      text:
-        "I’ve added your usual dinner hamper: sukuma, tomatoes, onions and an eggs tray. Ready to checkout any time.",
-    });
-  } else if (lower.includes("egg") || lower.includes("sukuma")) {
-    const eggs = { id: "eggs", name: "Eggs Tray", meta: "30 pcs", price: 420 };
-    const sukuma = { id: "sukuma", name: "Sukuma Wiki", meta: "500 g", price: 40 };
-    if (lower.includes("egg")) addToCart(eggs);
-    if (lower.includes("sukuma")) addToCart(sukuma);
-    saveCart();
-    botMessages.push({
-      from: "bot",
-      text: "Done. I’ve topped up your cart with fresh sukuma and/or eggs.",
-    });
-  } else if (lower.includes("cart")) {
-    const count = cart.reduce((s, i) => s + i.qty, 0);
-    botMessages.push({
-      from: "bot",
-      text: `You currently have ${count} item${count === 1 ? "" : "s"} in your cart.`,
-    });
-    } else {
-      botMessages.push({
-        from: "bot",
-        text:
-          "I'm still learning. Try: \"What's on offer today?\", \"Order my usual dinner hamper\", or \"Add eggs and sukuma.\"",
-      });
+    const unknown = data.unknownItems?.length ? ` I couldn’t match: ${data.unknownItems.join(", ")}.` : "";
+    botMessages.push({ from: "bot", text: `${data.reply || "Here’s what I found."}${unknown}` });
+    if (data.items?.length && data.requiresConfirmation) {
+      pendingBotAction = data.items;
     }
-    
-    // Reset to idle after response
-    setTimeout(() => {
-      botState = "idle";
-      updateVoiceBotIcon();
-    }, 1000);
-    
-    render();
-  }, 500);
+  } catch {
+    const lower = text.toLowerCase();
+    const fallback = parseShoppingList(text);
+    if (fallback.matches.length) {
+      pendingBotAction = fallback.matches.map(({ product, qty }) => ({
+        productId: product.id,
+        quantity: qty,
+      }));
+      botMessages.push({ from: "bot", text: "I found those groceries. Shall I add them to your cart?" });
+    } else if (lower.includes("offer")) {
+      botMessages.push({ from: "bot", text: "Today’s glow offers include sukuma, eggs and the Supper Starter Kit." });
+    } else if (lower.includes("cart")) {
+      const count = cart.reduce((sum, item) => sum + item.qty, 0);
+      botMessages.push({ from: "bot", text: `You currently have ${count} item${count === 1 ? "" : "s"} in your cart.` });
+    } else {
+      botMessages.push({ from: "bot", text: "Try asking me for groceries, offers, your cart, or delivery status." });
+    }
+  }
+  botState = "idle";
+  updateVoiceBotIcon();
+  render();
 }
 
 function updateVoiceBotIcon() {

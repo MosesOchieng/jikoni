@@ -832,6 +832,114 @@ app.get("/api/products", (req, res) => {
   );
 });
 
+// ----- Groq assistant -----
+
+function extractJsonObject(text) {
+  const cleaned = String(text || "")
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+app.post("/api/ai/assist", async (req, res) => {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ message: "AI assistant is not configured" });
+  }
+
+  const message = String(req.body?.message || "").trim();
+  const products = Array.isArray(req.body?.products)
+    ? req.body.products
+      .filter((product) => product && product.id && product.name)
+      .slice(0, 100)
+      .map((product) => ({
+        id: String(product.id),
+        name: String(product.name),
+        category: String(product.category || ""),
+        unit: String(product.unit || ""),
+        price: Number(product.price || 0),
+      }))
+    : [];
+  if (!message) {
+    return res.status(400).json({ message: "message is required" });
+  }
+
+  const catalog = products.map((product) =>
+    `${product.id} | ${product.name} | ${product.category} | ${product.unit} | KSh ${product.price}`
+  ).join("\n");
+  const systemPrompt = `You are Mama Mboga Bot, a warm Kenyan grocery assistant.
+Use only products from the catalog below. Understand common aliases and misspellings,
+including unga/maize flour, sukuma wiki, rosecoco beans, and quantities.
+Return JSON only with this exact shape:
+{"reply":"short helpful response","intent":"search|add_to_cart|recommend|order_status|general","items":[{"productId":"catalog id","quantity":1}],"unknownItems":[],"requiresConfirmation":false}
+If the user asks to add, buy, order, or prepare groceries, return intent add_to_cart,
+the matching items, and requiresConfirmation true. Never claim items were added or an
+order was placed. The app will ask the customer to confirm.
+For a grocery list, include every matched item and put unmatched names in unknownItems.
+For search or recommendations, include useful matching items but keep requiresConfirmation false.
+Catalog:
+${catalog}`;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
+        temperature: 0.2,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: message.slice(0, 2000) },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      const providerMessage = await response.text().catch(() => "");
+      console.error("Groq request failed:", response.status, providerMessage.slice(0, 240));
+      return res.status(502).json({ message: "AI assistant temporarily unavailable" });
+    }
+    const data = await response.json();
+    const parsed = extractJsonObject(data.choices?.[0]?.message?.content);
+    if (!parsed) {
+      return res.status(502).json({ message: "AI assistant returned an invalid response" });
+    }
+    const knownIds = new Set(products.map((product) => product.id));
+    const items = Array.isArray(parsed.items)
+      ? parsed.items
+        .filter((item) => knownIds.has(String(item.productId)))
+        .map((item) => ({
+          productId: String(item.productId),
+          quantity: Math.min(20, Math.max(1, Number.parseInt(item.quantity, 10) || 1)),
+        }))
+      : [];
+    res.json({
+      reply: String(parsed.reply || "I found a few ideas for your basket."),
+      intent: String(parsed.intent || "general"),
+      items,
+      unknownItems: Array.isArray(parsed.unknownItems)
+        ? parsed.unknownItems.map((item) => String(item)).slice(0, 20)
+        : [],
+      requiresConfirmation: Boolean(parsed.requiresConfirmation && items.length),
+    });
+  } catch (error) {
+    console.error("Groq assistant error:", error.message);
+    res.status(502).json({ message: "AI assistant temporarily unavailable" });
+  }
+});
+
 // ----- Hubs & Walk-in mode -----
 
 app.get("/api/hubs", (req, res) => {
