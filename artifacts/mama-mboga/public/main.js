@@ -2654,6 +2654,113 @@ function addToCart(item) {
   saveCart();
 }
 
+function normalizeListItem(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b(kg|kgs|g|grams?|l|litres?|liters?|pcs?|pieces?|pack|packs|tray|bunch)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/ies$/, "y")
+    .replace(/s$/, "");
+}
+
+function parseShoppingList(text) {
+  const aliases = {
+    sukuma: "sukuma",
+    "sukuma wiki": "sukuma",
+    tomato: "tomatoes",
+    tomatoes: "tomatoes",
+    onion: "onions",
+    onions: "onions",
+    egg: "eggs",
+    eggs: "eggs",
+    milk: "milk",
+    honey: "honey",
+    "maize flour": "maize_flour",
+    unga: "maize_flour",
+    rice: "rice",
+    beans: "beans",
+    "rose coco": "beans",
+    rosecoco: "beans",
+    bread: "bread",
+    sugar: "sugar",
+    salt: "salt",
+    oil: "oil",
+    chapati: "chapati",
+  };
+  const products = productsData.length ? productsData : [];
+  const entries = String(text || "")
+    .split(/[\n,;•]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const matches = [];
+  const unknown = [];
+
+  entries.forEach((entry) => {
+    const quantityMatch = entry.match(/^\s*(\d+)\s*(?:x|×)?\s*/i);
+    const qty = Math.max(1, Number(quantityMatch?.[1] || 1));
+    const rawName = entry.replace(/^\s*\d+\s*(?:x|×)?\s*/i, "").trim();
+    const normalized = normalizeListItem(rawName);
+    const aliasId = aliases[normalized] || aliases[normalized.replace(/\s+/g, " ")];
+    const product = products.find((item) =>
+      item.id === aliasId ||
+      normalizeListItem(item.name) === normalized ||
+      normalizeListItem(item.name).includes(normalized) ||
+      normalized.includes(normalizeListItem(item.name))
+    );
+    if (product) {
+      matches.push({ product, qty });
+    } else {
+      unknown.push(rawName);
+    }
+  });
+  return { matches, unknown };
+}
+
+function renderShoppingListHelper() {
+  const helper = document.createElement("section");
+  helper.className = "shopping-list-helper";
+  helper.innerHTML = `
+    <div class="shopping-list-heading">
+      <div class="shopping-list-icon">✦</div>
+      <div>
+        <div class="shopping-list-title">Paste your grocery list</div>
+        <div class="shopping-list-subtitle">One item per line or separate items with commas. We’ll build your basket in a tap.</div>
+      </div>
+    </div>
+    <textarea class="shopping-list-input" rows="4" placeholder="e.g.\n2 tomatoes\nsukuma wiki\nmilk"></textarea>
+    <div class="shopping-list-footer">
+      <span class="shopping-list-hint">Try: tomatoes, onions, rice</span>
+      <button class="shopping-list-btn" type="button">Add list to cart</button>
+    </div>
+    <div class="shopping-list-result" role="status"></div>
+  `;
+  const input = helper.querySelector(".shopping-list-input");
+  const button = helper.querySelector(".shopping-list-btn");
+  const result = helper.querySelector(".shopping-list-result");
+  button.addEventListener("click", () => {
+    const { matches, unknown } = parseShoppingList(input.value);
+    if (!matches.length && unknown.length) {
+      result.textContent = `We couldn’t match ${unknown.join(", ")}. Try a product name from the shop.`;
+      result.className = "shopping-list-result is-warning";
+      return;
+    }
+    matches.forEach(({ product, qty }) => {
+      for (let index = 0; index < qty; index += 1) addToCart(product);
+    });
+    const addedNames = matches.map(({ product, qty }) => `${product.name}${qty > 1 ? ` ×${qty}` : ""}`);
+    result.textContent = `${addedNames.join(", ")} added${unknown.length ? `. Not matched: ${unknown.join(", ")}` : "."}`;
+    result.className = `shopping-list-result ${unknown.length ? "is-warning" : "is-success"}`;
+    input.value = "";
+    showToast(`${matches.length} grocery ${matches.length === 1 ? "item" : "items"} added`);
+    setTimeout(() => render(), 450);
+  });
+  return helper;
+}
+
 function renderCart() {
   const wrap = document.createElement("div");
   wrap.className = "cart-screen";
@@ -2661,7 +2768,11 @@ function renderCart() {
   const header = document.createElement("div");
   header.className = "cart-header";
   const left = document.createElement("div");
-  left.innerHTML = `<div class="cart-title">Checkout</div>`;
+  left.innerHTML = `
+    <div class="cart-kicker">YOUR FRESH BASKET</div>
+    <div class="cart-title">Checkout</div>
+    <div class="cart-subtitle">${cart.reduce((sum, item) => sum + item.qty, 0)} item${cart.reduce((sum, item) => sum + item.qty, 0) === 1 ? "" : "s"} · delivered with care</div>
+  `;
   const backBtn = document.createElement("button");
   backBtn.className = "secondary-btn";
   backBtn.style.width = "auto";
@@ -2674,12 +2785,13 @@ function renderCart() {
   header.appendChild(left);
   header.appendChild(backBtn);
 
+  const listHelper = renderShoppingListHelper();
   const list = document.createElement("div");
   list.className = "cart-items";
   if (!cart.length) {
     const empty = document.createElement("div");
-    empty.className = "splash-meta";
-    empty.textContent = "Your cart is empty. Add a few veggies to get started.";
+    empty.className = "cart-empty-state";
+    empty.innerHTML = `<div class="cart-empty-icon">🧺</div><strong>Your basket is ready for good things.</strong><span>Add a few favourites above, or paste your full grocery list.</span>`;
     list.appendChild(empty);
   } else {
     cart.forEach((item) => {
@@ -2729,7 +2841,7 @@ function renderCart() {
   const total = subtotal - discountTotal + deliveryFee;
 
   const summary = document.createElement("div");
-  summary.className = "cart-summary";
+  summary.className = "cart-summary checkout-card";
   summary.innerHTML = `
     <div>
       <div>Subtotal</div>
@@ -2762,7 +2874,7 @@ function renderCart() {
   });
 
   const deliveryBlock = document.createElement("div");
-  deliveryBlock.className = "glow-card";
+  deliveryBlock.className = "glow-card checkout-card delivery-card";
   deliveryBlock.style.background = "#fdfaf2";
   deliveryBlock.innerHTML = `
     <div style="font-weight:600; margin-bottom:6px;">Delivery</div>
@@ -3046,6 +3158,7 @@ function renderCart() {
   });
 
   wrap.appendChild(header);
+  wrap.appendChild(listHelper);
   wrap.appendChild(list);
   if (cart.length) {
     wrap.appendChild(summary);
