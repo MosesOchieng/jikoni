@@ -1,0 +1,1 @@
+- [Native SQLite compatibility](native-sqlite-compatibility.md) — prefer Node’s built-in SQLite adapter when native sqlite3 installation is blocked in this Replit workspace.

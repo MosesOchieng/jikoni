@@ -60,8 +60,8 @@ self.addEventListener("push", (event) => {
   const options = {
     title: data.title || "Mama Mboga",
     body: data.body || "You have a new update",
-    icon: "/public/logo.png",
-    badge: "/public/logo.png",
+    icon: "/logo.png",
+    badge: "/logo.png",
     tag: data.tag || "mama-mboga-notification",
     data: data.data || {},
     requireInteraction: data.requireInteraction || false,

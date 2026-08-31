@@ -1,21 +1,6 @@
 // Use relative URLs for production (Vercel), absolute for local dev
 // Detect if we're on a different port than the API server
 const API_BASE = "";
-/*
-const LEGACY_API_BASE = (() => {
-  const hostname = window.location.hostname;
-  const port = window.location.port;
-  
-  // If on localhost/127.0.0.1/0.0.0.0 and not on port 4000, use port 4000 for API
-  const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname === "";
-  if (isLocal && port !== "4000") {
-    return "http://localhost:4000";
-  }
-  // If on port 4000 or production, use relative URLs
-  return "";
-})();
-*/
-
 const SCREENS = {
   LOADER: "loader",
   SPLASH_1: "splash1",
@@ -105,6 +90,7 @@ function loadState() {
       // Load cart from backend if user is logged in
       if (currentUser?.email && currentUser?.token) {
         loadCartFromBackend();
+        loadLatestOrderFromBackend();
       } else {
         // Fallback to local storage
         const savedCart = localStorage.getItem("jikoniCart");
@@ -234,6 +220,32 @@ function loadCartFromBackend() {
       const savedCart = localStorage.getItem("jikoniCart");
       if (savedCart) cart = JSON.parse(savedCart);
     });
+}
+
+function loadLatestOrderFromBackend() {
+  if (!currentUser?.email || !currentUser?.token) return;
+  fetch(`${API_BASE}/api/orders`, { headers: authHeaders() })
+    .then((res) => res.ok ? res.json() : Promise.reject(new Error("Could not load orders")))
+    .then((data) => {
+      const latest = data.orders?.[0];
+      if (!latest || lastOrderSummary) return;
+      lastOrderSummary = {
+        id: latest.id,
+        total: latest.total,
+        awarded: 0,
+        points: loyaltyState.points,
+        streak: loyaltyState.streak,
+        placedAt: latest.createdAt,
+        address: latest.address || "",
+        status: latest.status || "pending",
+      };
+      if (latest.address) {
+        deliveryAddress = latest.address;
+        localStorage.setItem("jikoniAddress", deliveryAddress);
+      }
+      if (currentScreen === SCREENS.HOME) render();
+    })
+    .catch((err) => console.warn("Latest order could not be loaded:", err));
 }
 
 function saveUser() {
@@ -1610,6 +1622,11 @@ function renderOrderTracking() {
       </div>
     </div>
     
+     <div id="tracking-live-status" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; color: #166534; font-size: 12px;">
+       <span style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.15);"></span>
+       <span>Live tracking · motorcycle pin refreshes every 5 seconds</span>
+     </div>
+     
     <div style="margin-bottom: 20px;">
       <div style="display: flex; justify-content: space-between; font-size: 12px; color: #647067; margin-bottom: 10px;">
         <span style="font-weight: ${stage >= 0 ? '600' : '400'}; color: ${stage >= 0 ? '#0d3b32' : '#647067'};">${statusMessages[0]}</span>
@@ -2103,6 +2120,10 @@ function renderOrderTracking() {
             const data = JSON.parse(event.data);
             
             if (data.type === 'status' || data.type === 'location') {
+               if (data.address && data.address !== deliveryAddress) {
+                 deliveryAddress = data.address;
+                 saveAddress();
+               }
               // Update order status
               let newStage = 0;
               const statusMap = {
@@ -2115,6 +2136,7 @@ function renderOrderTracking() {
                 'delivered': 4
               };
               newStage = statusMap[data.status] || 0;
+               if (typeof data.stage === 'number') newStage = data.stage;
               
               // Calculate minutes from placed time
               const statusTime = data.timestamp ? new Date(data.timestamp) : new Date();
@@ -2861,6 +2883,7 @@ function renderCart() {
             points: data.points ?? loyaltyState.points,
             streak: data.streak ?? loyaltyState.streak,
             placedAt: data.createdAt || new Date().toISOString(),
+            address: deliveryAddress || "",
           };
           cart = [];
           saveCart();

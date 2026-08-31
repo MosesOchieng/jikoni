@@ -1,8 +1,62 @@
 const express = require("express");
 const cors = require("cors");
-const sqlite3 = require("sqlite3").verbose();
+const { DatabaseSync } = require("node:sqlite");
 const path = require("path");
 const crypto = require("crypto");
+
+// Small compatibility layer keeps the imported callback-based SQLite API
+// working on Node 24 without a native sqlite3 package install.
+class CompatDatabase {
+  constructor(file) {
+    this.database = new DatabaseSync(file);
+  }
+  serialize(callback) {
+    callback();
+  }
+  run(sql, params, callback) {
+    if (typeof params === "function") {
+      callback = params;
+      params = [];
+    }
+    try {
+      const result = this.database.prepare(sql).run(...(params || []));
+      callback?.call({ lastID: Number(result.lastInsertRowid), changes: result.changes }, null);
+    } catch (error) {
+      callback?.call({}, error);
+    }
+  }
+  get(sql, params, callback) {
+    if (typeof params === "function") {
+      callback = params;
+      params = [];
+    }
+    try {
+      callback?.(null, this.database.prepare(sql).get(...(params || [])));
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+  all(sql, params, callback) {
+    if (typeof params === "function") {
+      callback = params;
+      params = [];
+    }
+    try {
+      callback?.(null, this.database.prepare(sql).all(...(params || [])));
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+  prepare(sql) {
+    const statement = this.database.prepare(sql);
+    return {
+      run: (...params) => statement.run(...(params.length === 1 && Array.isArray(params[0]) ? params[0] : params)),
+      finalize: () => {},
+    };
+  }
+}
+
+const sqlite3 = { Database: CompatDatabase, verbose: () => sqlite3 };
 
 const app = express();
 // CORS configuration - allow all origins for development
@@ -60,6 +114,7 @@ db.serialize(() => {
       deliveryFee INTEGER,
       total INTEGER,
       createdAt TEXT NOT NULL,
+      address TEXT,
       riderRating INTEGER,
       isWeekly INTEGER NOT NULL DEFAULT 0,
       weeklyOrderId TEXT,
@@ -79,6 +134,7 @@ db.serialize(() => {
   db.run(`ALTER TABLE orders ADD COLUMN riderLat REAL`, () => {});
   db.run(`ALTER TABLE orders ADD COLUMN riderLng REAL`, () => {});
   db.run(`ALTER TABLE orders ADD COLUMN lastStatusUpdate TEXT`, () => {});
+  db.run(`ALTER TABLE orders ADD COLUMN address TEXT`, () => {});
   
   // Create table for rider locations
   db.run(
@@ -149,6 +205,83 @@ db.serialize(() => {
     }
   });
 });
+
+const TRACKING_HUBS = {
+  trm: { name: "TRM Hub", lat: -1.2186, lng: 36.8933 },
+  westlands: { name: "Westlands Hub", lat: -1.2634, lng: 36.8025 },
+  cbd: { name: "CBD Hub", lat: -1.2921, lng: 36.8219 },
+};
+
+const TRACKING_STATUS_STAGE = {
+  pending: 0,
+  confirmed: 0,
+  preparing: 1,
+  dispatched: 2,
+  on_the_way: 3,
+  arrived: 4,
+  delivered: 4,
+};
+
+function getHubForAddress(address) {
+  const value = String(address || "").toLowerCase();
+  if (value.includes("westlands") || value.includes("parklands") || value.includes("lavington") || value.includes("riverside")) {
+    return TRACKING_HUBS.westlands;
+  }
+  if (value.includes("cbd") || value.includes("upper hill") || value.includes("ngara") || value.includes("south b")) {
+    return TRACKING_HUBS.cbd;
+  }
+  return TRACKING_HUBS.trm;
+}
+
+function getTrackingSnapshot(order) {
+  const hub = getHubForAddress(order.address);
+  const seed = Number(order.id) || 1;
+  const destination = {
+    lat: hub.lat + (seed % 10) * 0.005 - 0.025,
+    lng: hub.lng + ((seed * 7) % 10) * 0.005 - 0.025,
+  };
+  const createdAtMs = new Date(order.createdAt).getTime();
+  const elapsedSeconds = Math.max(0, (Date.now() - createdAtMs) / 1000);
+  const elapsedMinutes = elapsedSeconds / 60;
+  const manuallyTracked = order.riderLat !== null && order.riderLat !== undefined &&
+    order.riderLng !== null && order.riderLng !== undefined;
+  const storedStage = TRACKING_STATUS_STAGE[order.status] ?? 0;
+  const stage = manuallyTracked || (order.status && !["pending", "confirmed"].includes(order.status))
+    ? storedStage
+    : elapsedMinutes >= 18 ? 4 : elapsedMinutes >= 10 ? 3 : elapsedMinutes >= 5 ? 2 : elapsedMinutes >= 2 ? 1 : 0;
+  const status = stage === 4
+    ? (order.status === "delivered" ? "delivered" : "arrived")
+    : ["pending", "preparing", "dispatched", "on_the_way"][stage] || "pending";
+  const progress = stage <= 2 ? 0 : stage >= 4 ? 1 : Math.min(1, Math.max(0, (elapsedMinutes - 5) / 13));
+  const riderLat = manuallyTracked
+    ? Number(order.riderLat)
+    : hub.lat + (destination.lat - hub.lat) * progress;
+  const riderLng = manuallyTracked
+    ? Number(order.riderLng)
+    : hub.lng + (destination.lng - hub.lng) * progress;
+  return {
+    type: "status",
+    orderId: order.id,
+    status,
+    stage,
+    progress: Number(progress.toFixed(4)),
+    elapsedSeconds: Math.floor(elapsedSeconds),
+    etaMinutes: Math.max(0, Math.ceil(18 - elapsedMinutes)),
+    riderId: order.riderId || `mama-rider-${order.id}`,
+    riderName: "John M.",
+    riderPhone: "+254 712 345 678",
+    vehicle: "Motorcycle",
+    riderLat,
+    riderLng,
+    hub: { name: hub.name, lat: hub.lat, lng: hub.lng },
+    destination,
+    address: order.address || null,
+    orderCreatedAt: order.createdAt,
+    timestamp: new Date().toISOString(),
+    lastUpdate: order.lastStatusUpdate || order.createdAt,
+    source: manuallyTracked ? "rider_device" : "timeline_simulation",
+  };
+}
 
 function signToken(user) {
   const payload = Buffer.from(JSON.stringify({
@@ -366,7 +499,7 @@ app.post("/api/auth/signup", (req, res) => {
       
       mailer.sendMail(
         {
-          from: "mosesochiengopiyo@gmail.com", // Must match authenticated Gmail user
+          from: process.env.SMTP_USER || "no-reply@example.invalid",
           to: email,
           subject: "Your Mama Mboga verification code",
           html: createEmailTemplate("Verify Your Email", verificationContent, "#f97316"),
@@ -471,7 +604,7 @@ app.post("/api/auth/verify", (req, res) => {
           
           mailer.sendMail(
             {
-              from: "mosesochiengopiyo@gmail.com",
+              from: process.env.SMTP_USER || "no-reply@example.invalid",
               to: email,
               subject: "Welcome to Mama Mboga! 🍅",
               html: createEmailTemplate("Karibu Mama Mboga! 🎉", welcomeContent, "#22c55e"),
@@ -544,7 +677,7 @@ app.post("/api/auth/forgot", (req, res) => {
         
         mailer.sendMail(
           {
-            from: "mosesochiengopiyo@gmail.com",
+            from: process.env.SMTP_USER || "no-reply@example.invalid",
             to: email,
             subject: "Reset your Mama Mboga password",
             html: createEmailTemplate("🔐 Password Reset", resetContent, "#f97316"),
@@ -608,7 +741,7 @@ app.post("/api/auth/reset-password", (req, res) => {
         
         mailer.sendMail(
           {
-            from: "mosesochiengopiyo@gmail.com",
+            from: process.env.SMTP_USER || "no-reply@example.invalid",
             to: email,
             subject: "Your Mama Mboga password has been reset",
             html: createEmailTemplate("✅ Password Reset Successful", resetConfirmContent, "#22c55e"),
@@ -725,7 +858,7 @@ app.post("/api/cart", authRequired, (req, res) => {
 // ----- Orders (auth required) -----
 
 app.post("/api/orders", authRequired, (req, res) => {
-  const { items, deliveryMethod, paymentMethod, totals, isWeekly } = req.body;
+  const { items, deliveryMethod, paymentMethod, address, totals, isWeekly } = req.body;
   const email = req.user.email;
   if (!Array.isArray(items) || !items.length) {
     return res.status(400).json({ message: "email and items required" });
@@ -738,8 +871,8 @@ app.post("/api/orders", authRequired, (req, res) => {
   const weeklyOrderId = isWeekly ? `weekly-${Date.now()}` : null;
 
   db.run(
-    `INSERT INTO orders (email, itemsJson, deliveryMethod, paymentMethod, subtotal, discounts, deliveryFee, total, createdAt, isWeekly, weeklyOrderId, status, lastStatusUpdate)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO orders (email, itemsJson, deliveryMethod, paymentMethod, subtotal, discounts, deliveryFee, total, createdAt, address, isWeekly, weeklyOrderId, status, lastStatusUpdate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       email,
       JSON.stringify(items),
@@ -750,6 +883,7 @@ app.post("/api/orders", authRequired, (req, res) => {
       deliveryFee,
       total,
       createdAt,
+      address || null,
       isWeekly ? 1 : 0,
       weeklyOrderId,
       'confirmed', // Initial status
@@ -845,7 +979,7 @@ app.post("/api/orders", authRequired, (req, res) => {
 
                     mailer.sendMail(
                       {
-                        from: "mosesochiengopiyo@gmail.com",
+                        from: process.env.SMTP_USER || "no-reply@example.invalid",
                         to: email,
                         subject: `Order Confirmed - #${id}`,
                         html: createEmailTemplate("Order Confirmed! 🎉", orderContent, "#22c55e"),
@@ -883,8 +1017,8 @@ app.get("/api/orders", authRequired, (req, res) => {
   const email = req.user.email;
   const { weeklyOnly } = req.query;
   const query = weeklyOnly === "true" 
-    ? "SELECT id, itemsJson, total, createdAt, weeklyOrderId FROM orders WHERE email = ? AND isWeekly = 1 ORDER BY datetime(createdAt) DESC"
-    : "SELECT id, itemsJson, total, createdAt FROM orders WHERE email = ? ORDER BY datetime(createdAt) DESC LIMIT 20";
+    ? "SELECT id, itemsJson, total, createdAt, weeklyOrderId, status, address FROM orders WHERE email = ? AND isWeekly = 1 ORDER BY datetime(createdAt) DESC"
+    : "SELECT id, itemsJson, total, createdAt, status, address FROM orders WHERE email = ? ORDER BY datetime(createdAt) DESC LIMIT 20";
   db.all(
     query,
     [email],
@@ -897,6 +1031,8 @@ app.get("/api/orders", authRequired, (req, res) => {
         id: row.id,
         total: row.total,
         createdAt: row.createdAt,
+        status: row.status || "pending",
+        address: row.address || null,
         weeklyOrderId: row.weeklyOrderId || null,
       }));
       res.json({ orders });
@@ -975,7 +1111,7 @@ app.post("/api/orders/:orderId/delivered", authRequired, (req, res) => {
             // Send delivery email
             mailer.sendMail(
               {
-                from: "mosesochiengopiyo@gmail.com",
+                from: process.env.SMTP_USER || "no-reply@example.invalid",
                 to: email,
                 subject: `Order Delivered - #${orderId} 🎉`,
                 html: createEmailTemplate("Order Delivered! 🎉", deliveryContent, "#22c55e"),
@@ -1069,6 +1205,7 @@ app.get("/api/orders/:orderId/stream", (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering in nginx
+    res.flushHeaders?.();
     
     // Store connection
     if (!sseConnections.has(orderId)) {
@@ -1076,19 +1213,28 @@ app.get("/api/orders/:orderId/stream", (req, res) => {
     }
     sseConnections.get(orderId).add(res);
     
-    // Send initial state
-    db.get("SELECT status, riderLat, riderLng, lastStatusUpdate FROM orders WHERE id = ?", [orderId], (err, orderData) => {
+    // Send initial state immediately, then push fresh timeline/location state.
+    db.get("SELECT * FROM orders WHERE id = ?", [orderId], (err, orderData) => {
       if (!err && orderData) {
-        res.write(`data: ${JSON.stringify({
-          type: 'status',
-          status: orderData.status || 'pending',
-          riderLat: orderData.riderLat,
-          riderLng: orderData.riderLng,
-          timestamp: orderData.lastStatusUpdate || new Date().toISOString()
-        })}\n\n`);
+        res.write(`data: ${JSON.stringify(getTrackingSnapshot(orderData))}\n\n`);
       }
     });
     
+    // Send a live snapshot every 5 seconds. If a rider device has submitted
+    // coordinates, those coordinates win; otherwise the pin advances on the
+    // delivery timeline from hub to destination.
+    const updateTimer = setInterval(() => {
+      db.get("SELECT * FROM orders WHERE id = ?", [orderId], (err, orderData) => {
+        if (!err && orderData) {
+          try {
+            res.write(`data: ${JSON.stringify(getTrackingSnapshot(orderData))}\n\n`);
+          } catch (writeError) {
+            clearInterval(updateTimer);
+          }
+        }
+      });
+    }, 5000);
+
     // Send heartbeat every 30 seconds to keep connection alive
     const heartbeat = setInterval(() => {
       try {
@@ -1100,6 +1246,7 @@ app.get("/api/orders/:orderId/stream", (req, res) => {
     
     // Clean up on client disconnect
     req.on('close', () => {
+      clearInterval(updateTimer);
       clearInterval(heartbeat);
       if (sseConnections.has(orderId)) {
         sseConnections.get(orderId).delete(res);
@@ -1247,7 +1394,7 @@ app.get("/api/orders/:orderId/status", authRequired, (req, res) => {
   const email = req.user.email;
   
   db.get(
-    "SELECT status, riderId, riderLat, riderLng, lastStatusUpdate FROM orders WHERE id = ? AND email = ?",
+    "SELECT * FROM orders WHERE id = ? AND email = ?",
     [orderId, email],
     (err, order) => {
       if (err) {
@@ -1257,13 +1404,7 @@ app.get("/api/orders/:orderId/status", authRequired, (req, res) => {
         return res.status(404).json({ message: "Order not found" });
       }
       
-      res.json({
-        status: order.status || 'pending',
-        riderId: order.riderId,
-        riderLat: order.riderLat,
-        riderLng: order.riderLng,
-        lastUpdate: order.lastStatusUpdate
-      });
+      res.json(getTrackingSnapshot(order));
     }
   );
 });
