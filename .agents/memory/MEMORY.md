@@ -1,2 +1,3 @@
 - [Native SQLite compatibility](native-sqlite-compatibility.md) — prefer Node’s built-in SQLite adapter when native sqlite3 installation is blocked in this Replit workspace.
 - [Groq model availability](groq-model-availability.md) — verify the live Groq model list before choosing or changing the assistant’s default model.
+- [Vercel pnpm workspace builds](vercel-pnpm-workspace.md) — Vercel needs an explicit pnpm install/build configuration and a synchronized frozen lockfile.
