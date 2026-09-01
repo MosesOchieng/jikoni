@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "BASE_PATH=/ PORT=21517 pnpm --filter @workspace/mama-mboga run build",
+  "outputDirectory": "artifacts/mama-mboga/dist/public",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
