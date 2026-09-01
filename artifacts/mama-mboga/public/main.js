@@ -370,6 +370,25 @@ function loadProducts() {
     });
 }
 
+function getProductMark(value) {
+  const source = typeof value === "string"
+    ? value
+    : value?.name || value?.id || value?.category || "Fresh";
+  const words = source
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return "FR";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
+function productMarkHtml(product, className = "") {
+  return `<span class="product-mark ${className}" aria-hidden="true">${getProductMark(product)}</span>`;
+}
+
 function render() {
   const root = document.getElementById("app");
   root.innerHTML = "";
@@ -400,13 +419,8 @@ function render() {
       voiceBot.className = "icon-btn voice-bot-btn";
       voiceBot.id = "voice-bot-icon";
       // Set icon based on state
-      if (botState === "listening") {
-        voiceBot.textContent = "👂";
-      } else if (botState === "talking") {
-        voiceBot.innerHTML = "<span style='color:#ef4444;'>🔴</span>";
-      } else {
-        voiceBot.textContent = "🎙️";
-      }
+      voiceBot.innerHTML = `<span class="voice-glyph ${botState}" aria-hidden="true"></span>`;
+      voiceBot.title = "Ask Mama Mboga";
       voiceBot.onclick = () => {
         botOpen = !botOpen;
         if (botOpen && botMessages.length === 0) {
@@ -422,7 +436,8 @@ function render() {
 
     const bell = document.createElement("button");
     bell.className = "icon-btn";
-    bell.textContent = "🔔";
+    bell.innerHTML = '<span class="bell-glyph" aria-hidden="true"></span>';
+    bell.setAttribute("aria-label", "Notifications");
     bell.onclick = () => {
       currentScreen = SCREENS.NOTIFICATIONS;
       render();
@@ -2446,19 +2461,21 @@ function renderHome() {
   const search = document.createElement("div");
   search.className = "search-bar";
   search.innerHTML = `
-    <span>🔍</span>
+    <span class="search-glyph" aria-hidden="true"></span>
     <input class="search-input" placeholder="Search flour, veggies, spices…" />
-    <span>🎙️</span>
+    <button class="search-voice" type="button" aria-label="Open Mama Mboga assistant">
+      <span class="mic-glyph" aria-hidden="true"></span>
+    </button>
   `;
 
   const streak = document.createElement("div");
   streak.className = "streak-pill";
-  streak.innerHTML = "🔥 Day 3";
+  streak.innerHTML = '<span class="streak-dot" aria-hidden="true"></span><span>3 day streak</span>';
 
   const cartChip = document.createElement("button");
   cartChip.className = "cart-chip";
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
-  cartChip.innerHTML = `🛒 <span>${count}</span>`;
+  cartChip.innerHTML = `<span class="cart-chip-icon" aria-hidden="true">B</span><span>Basket</span><span class="cart-chip-count">${count}</span>`;
   cartChip.onclick = () => {
     currentScreen = SCREENS.CART;
     render();
@@ -2467,6 +2484,32 @@ function renderHome() {
   right.appendChild(streak);
   right.appendChild(cartChip);
   header.appendChild(right);
+
+  const searchVoice = search.querySelector(".search-voice");
+  searchVoice.addEventListener("click", () => {
+    botOpen = true;
+    if (botMessages.length === 0) {
+      botMessages.push({
+        from: "bot",
+        text: "Tell me what you need and I’ll help build your basket.",
+      });
+    }
+    renderBotOverlay();
+  });
+  const searchInput = search.querySelector(".search-input");
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && searchInput.value.trim()) {
+      currentScreen = SCREENS.SEARCH;
+      currentCategory = null;
+      render();
+      const nextInput = document.querySelector(".search-input");
+      if (nextInput) {
+        nextInput.value = searchInput.value;
+        nextInput.dispatchEvent(new Event("input"));
+        nextInput.focus();
+      }
+    }
+  });
 
   const hubStrip = document.createElement("div");
   hubStrip.className = "hub-strip";
@@ -2511,29 +2554,40 @@ function renderHome() {
   const heroGlow = document.createElement("div");
   heroGlow.className = "hero-glow";
   heroGlow.innerHTML = `
-    <div class="hero-glow-pill"></div>
-    <div class="hero-glow-title"></div>
-    <div class="hero-glow-sub hero-glow-sub-main"></div>
-    <div class="hero-glow-sub hero-glow-sub-secondary"></div>
+    <div class="hero-glow-visual" aria-hidden="true">
+      <div class="glow-orbit glow-orbit-one"></div>
+      <div class="glow-orbit glow-orbit-two"></div>
+      <div class="glow-visual-core"><span>MM</span></div>
+      <div class="glow-visual-caption">FRESH<br />PICKS</div>
+    </div>
+    <div class="hero-glow-copy">
+      <div class="hero-glow-pill"></div>
+      <div class="hero-glow-title"></div>
+      <div class="hero-glow-sub hero-glow-sub-main"></div>
+      <div class="hero-glow-sub hero-glow-sub-secondary"></div>
+    </div>
   `;
   const heroCta = document.createElement("button");
   heroCta.className = "hero-glow-cta";
-  heroCta.textContent = "Shop now";
-  heroCta.onclick = () => showToast("Glow combo added to your suggestions");
+  heroCta.textContent = "Browse fresh picks";
+  heroCta.onclick = () => {
+    currentCategory = null;
+    currentScreen = SCREENS.SEARCH;
+    render();
+  };
   heroGlow.appendChild(heroCta);
 
   const timerEl = document.createElement("div");
   timerEl.className = "hero-glow-sub hero-timer";
-  timerEl.textContent = `Offer ends in 00:${String(heroTimerSeconds).padStart(2, "0")}`;
+  timerEl.textContent = `Refreshes in 00:${String(heroTimerSeconds).padStart(2, "0")}`;
   heroGlow.appendChild(timerEl);
 
   const iconsRow = document.createElement("div");
   iconsRow.className = "hero-glow-icons";
   iconsRow.innerHTML = `
-    <span title="Fast delivery">🛵</span>
-    <span title="Fresh produce">🥬</span>
-    <span title="Best prices">💰</span>
-    <span title="24/7 support">💬</span>
+    <span><strong>08 min</strong><small>average prep</small></span>
+    <span><strong>Fresh</strong><small>daily stock</small></span>
+    <span><strong>+1 pt</strong><small>per KSh 10</small></span>
   `;
   heroGlow.appendChild(iconsRow);
 
@@ -2541,24 +2595,37 @@ function renderHome() {
   updateHeroMessageDom();
   startHeroTimer();
 
-  // Removed explicit live stock line to keep hero cleaner in walk-in mode
+  const proofRow = document.createElement("div");
+  proofRow.className = "home-proof-row";
+  proofRow.innerHTML = `
+    <div class="proof-item"><span class="proof-value">Daily</span><span class="proof-label">fresh stock</span></div>
+    <div class="proof-divider" aria-hidden="true"></div>
+    <div class="proof-item"><span class="proof-value">${hub?.etaMinutes || 8} min</span><span class="proof-label">average prep</span></div>
+    <div class="proof-divider" aria-hidden="true"></div>
+    <div class="proof-item"><span class="proof-value">1 pt</span><span class="proof-label">per KSh 10</span></div>
+  `;
 
   const quickTitle = document.createElement("div");
   quickTitle.className = "section-title";
-  quickTitle.textContent = "Quick categories";
+  quickTitle.innerHTML = `<span>Shop by category</span><button class="section-link" type="button">View all</button>`;
+  quickTitle.querySelector(".section-link").onclick = () => {
+    currentCategory = null;
+    currentScreen = SCREENS.SEARCH;
+    render();
+  };
   const catRow = document.createElement("div");
   catRow.className = "category-row";
   [
-    ["🥦", "Vegetables"],
-    ["🥖", "Flour"],
-    ["🧂", "Spices"],
-    ["🥛", "Milk"],
-    ["🥚", "Eggs"],
-  ].forEach(([icon, label]) => {
+    ["VEG", "Vegetables"],
+    ["BAS", "Flour"],
+    ["SPC", "Spices"],
+    ["MLK", "Milk"],
+    ["EGG", "Eggs"],
+  ].forEach(([mark, label]) => {
     const chip = document.createElement("button");
     chip.className = "category-chip";
     chip.style.cursor = "pointer";
-    chip.innerHTML = `<div class="category-icon">${icon}</div><div>${label}</div>`;
+    chip.innerHTML = `<div class="category-icon">${mark}</div><div>${label}</div><span class="category-arrow" aria-hidden="true">→</span>`;
     chip.onclick = () => {
       currentCategory = label;
       currentScreen = SCREENS.SEARCH;
@@ -2569,7 +2636,7 @@ function renderHome() {
 
   const subsTitle = document.createElement("div");
   subsTitle.className = "section-title";
-  subsTitle.textContent = "Save time with packs & subscriptions";
+  subsTitle.innerHTML = `<span>Ready-made baskets</span><span class="section-note">Save time tonight</span>`;
 
   const subsRow = document.createElement("div");
   subsRow.className = "recommended-row";
@@ -2590,11 +2657,20 @@ function renderHome() {
 
   packs.forEach((pack) => {
     const card = document.createElement("div");
-    card.className = "product-card";
+    card.className = "product-card pack-card";
+    const label = document.createElement("div");
+    label.className = "pack-label";
+    label.textContent = "CURATED BASKET";
+    card.appendChild(label);
     const title = document.createElement("div");
     title.className = "product-name";
     title.textContent = pack.name;
     card.appendChild(title);
+
+    const meta = document.createElement("div");
+    meta.className = "pack-meta";
+    meta.textContent = `${pack.items.length} everyday staples`;
+    card.appendChild(meta);
 
     const iconRow = document.createElement("div");
     iconRow.className = "pack-icons";
@@ -2603,7 +2679,7 @@ function renderHome() {
       if (p) {
         const bubble = document.createElement("div");
         bubble.className = "pack-icon";
-        bubble.textContent = p.icon || "🛒";
+        bubble.innerHTML = productMarkHtml(p);
         iconRow.appendChild(bubble);
       }
     });
@@ -2637,6 +2713,7 @@ function renderHome() {
   container.appendChild(hubStrip);
   container.appendChild(search);
   container.appendChild(heroGlow);
+  container.appendChild(proofRow);
   container.appendChild(quickTitle);
   container.appendChild(catRow);
   container.appendChild(subsTitle);
@@ -2754,7 +2831,7 @@ function renderShoppingListHelper() {
   helper.className = "shopping-list-helper";
   helper.innerHTML = `
     <div class="shopping-list-heading">
-      <div class="shopping-list-icon">✦</div>
+        <div class="shopping-list-icon">LIST</div>
       <div>
         <div class="shopping-list-title">Paste your grocery list</div>
         <div class="shopping-list-subtitle">One item per line or separate items with commas. We’ll build your basket in a tap.</div>
@@ -2843,7 +2920,7 @@ function renderCart() {
   if (!cart.length) {
     const empty = document.createElement("div");
     empty.className = "cart-empty-state";
-    empty.innerHTML = `<div class="cart-empty-icon">🧺</div><strong>Your basket is ready for good things.</strong><span>Add a few favourites above, or paste your full grocery list.</span>`;
+    empty.innerHTML = `<div class="cart-empty-icon" aria-hidden="true"><span class="basket-mark"></span></div><strong>Your basket is ready for good things.</strong><span>Add a few favourites above, or paste your full grocery list.</span>`;
     list.appendChild(empty);
   } else {
     cart.forEach((item) => {
@@ -2851,7 +2928,7 @@ function renderCart() {
       row.className = "cart-item-row";
       row.innerHTML = `
         <div class="cart-item-main">
-          <div class="cart-item-name">${item.icon ? `<span style="margin-right:6px;">${item.icon}</span>` : ""}${item.name}</div>
+          <div class="cart-item-name">${productMarkHtml(item, "product-mark-small")}${item.name}</div>
           <div class="cart-item-meta">${item.meta}</div>
           <div class="cart-item-meta">KSh ${item.price} each</div>
         </div>
@@ -2862,7 +2939,7 @@ function renderCart() {
             <button data-plus class="icon-btn" style="width:26px;height:26px;">+</button>
           </div>
           <div style="margin-top:4px; font-size:13px; text-align:right;">Subtotal KSh ${item.price * item.qty}</div>
-          <button data-remove style="margin-top:4px; border:none; background:transparent; font-size:12px; color:#b91c1c; cursor:pointer;">🗑 Remove</button>
+            <button data-remove style="margin-top:4px; border:none; background:transparent; font-size:12px; color:#b91c1c; cursor:pointer;">Remove</button>
         </div>
       `;
       const minus = row.querySelector("[data-minus]");
@@ -2908,7 +2985,9 @@ function renderCart() {
   const glow = document.createElement("div");
   glow.className = "glow-card";
   glow.innerHTML = `
-    <div>🥛 Add 1L of milk to earn extra points & move closer to your next reward.</div>
+    <div class="glow-card-kicker">SMART SUGGESTION</div>
+    <div class="glow-card-title">Add 1L of fresh milk</div>
+    <div class="glow-card-copy">Complete your basket, unlock 12 points and qualify for the next basket reward.</div>
     <div class="glow-card-actions">
       <button class="glow-btn accept">Accept</button>
       <button class="glow-btn reject">Reject</button>
@@ -2916,7 +2995,7 @@ function renderCart() {
   `;
   const [acceptBtn, rejectBtn] = glow.querySelectorAll(".glow-btn");
   acceptBtn.addEventListener("click", () => {
-    addToCart({ id: "milk", name: "Fresh Milk", meta: "1 L", price: 120, icon: "🥛" });
+    addToCart({ id: "milk", name: "Fresh Milk", meta: "1 L", price: 120, icon: "ML" });
     showToast("Milk added. You just unlocked 50 extra points!");
     render();
   });
@@ -4205,7 +4284,7 @@ function renderSearch() {
       const nameRow = document.createElement("div");
       nameRow.style.cssText = "display:flex; align-items:center; gap:8px; margin-bottom:6px;";
       nameRow.innerHTML = `
-        <span style="font-size:24px;">${p.icon || "📦"}</span>
+        ${productMarkHtml(p)}
         <div style="flex:1;">
           <div style="font-weight:600; font-size:14px; line-height:1.3;">${p.name}</div>
           <div style="font-size:11px; color:#666; margin-top:2px;">${p.unit}</div>
@@ -4457,11 +4536,11 @@ function updateVoiceBotIcon() {
   if (!icon) return;
   
   if (botState === "listening") {
-    icon.textContent = "👂";
+    icon.innerHTML = '<span class="voice-glyph listening" aria-hidden="true"></span>';
   } else if (botState === "talking") {
-    icon.innerHTML = "<span style='color:#ef4444;'>🔴</span>";
+    icon.innerHTML = '<span class="voice-glyph talking" aria-hidden="true"></span>';
   } else {
-    icon.textContent = "🎙️";
+    icon.innerHTML = '<span class="voice-glyph" aria-hidden="true"></span>';
   }
 }
 
@@ -4636,9 +4715,13 @@ function updateHeroMessageDom() {
         const pill = document.querySelector(".hero-glow-pill");
         const title = document.querySelector(".hero-glow-title");
         const sub = document.querySelector(".hero-glow-sub-main");
-        if (pill) pill.textContent = "📅 Weekly Order";
-        if (title) title.textContent = "Your Weekly Order is Active";
+        if (pill) pill.textContent = "WEEKLY PLAN";
+        if (title) title.textContent = "Your weekly basket is active";
         if (sub) sub.textContent = `Your order will automatically repeat every week. Total: KSh ${weeklyOrder.total}`;
+        const secondary = document.querySelector(".hero-glow-sub-secondary");
+        if (secondary) secondary.textContent = "Edit your basket any time before the next refill.";
+        const cta = document.querySelector(".hero-glow-cta");
+        if (cta) cta.textContent = "Review basket";
         return;
       }
       // Fallback to regular messages if no weekly orders
@@ -4656,28 +4739,35 @@ function updateHeroMessageDom() {
 function showRegularHeroMessage() {
   const heroMessages = [
     {
-      title: "🎁 Surprise Hamper of the Hour",
-      sub: "Mixed veggies, pantry staples and a sweet treat · limited drops all day.",
-      pill: "Glow Hamper · +Extra pts",
+      title: "A fresher way to plan supper",
+      sub: "Build a ready-made basket with vegetables, pantry basics and a little extra value.",
+      secondary: "Supper Starter Kit · Save KSh 60",
+      pill: "TODAY'S PICK",
     },
     {
-      title: "🚗 Free delivery over KSh 800",
-      sub: "Shop your weekly basics and we'll cover delivery from the nearest hub.",
-      pill: "Delivery Glow · 🚙",
+      title: "Free delivery from KSh 800",
+      sub: "Top up your weekly basics and we’ll bring them from the nearest Mama Mboga hub.",
+      secondary: "Delivery from your selected hub · about 8 min",
+      pill: "DELIVERY PERK",
     },
     {
-      title: "🍲 Supper Starter Kit",
-      sub: "Tomatoes, onions & sukuma in one combo · save KSh 60 tonight.",
-      pill: "Combo Glow · Save KSh 60",
+      title: "Your essentials, already grouped",
+      sub: "Tomatoes, onions and sukuma in one quick combo for an easier dinner start.",
+      secondary: "Ready-made basket · Save KSh 60 tonight",
+      pill: "EASY SUPPER",
     },
   ];
   const hero = heroMessages[heroIndex % heroMessages.length];
   const pill = document.querySelector(".hero-glow-pill");
   const title = document.querySelector(".hero-glow-title");
   const sub = document.querySelector(".hero-glow-sub-main");
+  const secondary = document.querySelector(".hero-glow-sub-secondary");
+  const cta = document.querySelector(".hero-glow-cta");
   if (pill) pill.textContent = hero.pill;
   if (title) title.textContent = hero.title;
   if (sub) sub.textContent = hero.sub;
+  if (secondary) secondary.textContent = hero.secondary;
+  if (cta) cta.textContent = "Browse fresh picks";
 }
 
 function startHeroTimer() {
@@ -4690,7 +4780,7 @@ function startHeroTimer() {
     heroTimerSeconds = (heroTimerSeconds - 1 + 60) % 60;
     const timerEl = document.querySelector(".hero-timer");
     if (timerEl) {
-      timerEl.textContent = `Offer ends in 00:${String(heroTimerSeconds).padStart(2, "0")}`;
+      timerEl.textContent = `Refreshes in 00:${String(heroTimerSeconds).padStart(2, "0")}`;
     }
   }, 1000);
 }
